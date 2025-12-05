@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doodle Reader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              reader: {
+                bg: '#F6F8FC', // Gmail Background
+                surface: '#FFFFFF',
+                sidebar: '#F6F8FC', 
+                select: '#D3E3FD', // Google Selection Blue
+                'select-text': '#001D35',
+                active: '#0B57D0', // Google Blue
+                text: '#1F1F1F', // Google Material Text
+                secondary: '#444746', 
+                border: '#E7E7E7',
+                snippet: '#5E5E5E',
+                fab: '#C2E7FF', // Compose Button
+                'fab-hover': '#B3D7EF',
+                red: '#EA4335',
+                blue: '#4285F4',
+                green: '#34A853',
+                yellow: '#FBBC05'
+              }
+            },
+            fontFamily: {
+              sans: ['"Google Sans"', 'Roboto', 'Arial', 'sans-serif'],
+            },
+            borderRadius: {
+              '4xl': '32px',
+            },
+            boxShadow: {
+              'card': '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
+              'fab': '0 4px 8px 3px rgba(0,0,0,0.15)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background-color: #F6F8FC;
+      }
+      #root {
+        height: 100%;
+      }
+      /* Custom Scrollbar for the list area */
+      ::-webkit-scrollbar {
+        width: 12px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: #DADCE0;
+        border-radius: 6px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: #BDC1C6;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
