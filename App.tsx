@@ -332,7 +332,7 @@ function App() {
         isOpen={isBulkTranscribeOpen}
         onClose={() => setBulkTranscribeOpen(false)}
         items={filteredItems}
-        feedTitle={filterId ? feeds.find(f => f.id === filterId)?.title : undefined}
+        feedTitle={filterId ? feeds.find(f => f.id === filterId)?.name : undefined}
       />
     </div>
   );
