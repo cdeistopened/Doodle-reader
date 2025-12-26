@@ -9,9 +9,10 @@
  */
 
 import React, { createContext, useContext, useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useConvex } from 'convex/react';
+import { useQuery, useMutation, useConvex, ConvexReactClient } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import type { FunctionReturnType } from 'convex/server';
 
 import type {
   Document,
@@ -76,6 +77,9 @@ const ConvexStorageContext = createContext<ConvexStorageContextType | null>(null
 // =============================================================================
 
 export function ConvexStorageProvider({ children }: { children: React.ReactNode }) {
+  // Get the Convex client for imperative queries (like search)
+  const convex = useConvex();
+
   // Reactive queries - these auto-update when data changes
   const rawDocuments = useQuery(api.documents.list, {}) ?? [];
   const rawFeeds = useQuery(api.feeds.list, {}) ?? [];
@@ -103,8 +107,6 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
   const updateFolder = useMutation(api.folders.update);
   const removeFolder = useMutation(api.folders.remove);
   const reorderFoldersMutation = useMutation(api.folders.reorder);
-
-  const searchDocuments = useMutation(api.documents.search);
 
   // Transform Convex documents to our Document type
   const documents = useMemo(() => {
@@ -313,9 +315,9 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
     await reorderFoldersMutation({ folderIds: folderIds as Id<'folders'>[] });
   }, [reorderFoldersMutation]);
 
-  // Search
-  const search = useCallback(async (query: string, type?: ContentType): Promise<Document[]> => {
-    const results = await searchDocuments({ query, type, limit: 50 });
+  // Search - use convex client to call query imperatively
+  const search = useCallback(async (searchQuery: string, type?: ContentType): Promise<Document[]> => {
+    const results = await convex.query(api.documents.search, { query: searchQuery, type, limit: 50 });
     return results.map((doc): Document => ({
       id: doc._id,
       type: doc.type,
@@ -334,7 +336,7 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
       ...(doc.video && { video: doc.video }),
       ...(doc.ai && { ai: doc.ai }),
     } as Document));
-  }, [searchDocuments]);
+  }, [convex]);
 
   // Query helpers (filter in-memory from reactive data)
   const queryDocuments = useCallback((query: DocumentQuery): Document[] => {
