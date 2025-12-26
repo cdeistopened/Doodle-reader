@@ -116,6 +116,7 @@ export function toOldFeedItem(doc: ArticleDocument): FeedItem {
     feedId: doc.article.feedId,
     title: doc.title,
     author: doc.article.author || '',
+    authorUrl: doc.article.authorUrl,
     snippet: doc.article.excerpt || doc.summary || '',
     content: doc.content,
     url: doc.article.url,

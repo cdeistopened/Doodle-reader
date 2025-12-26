@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/feed': {
+            target: 'http://localhost:3002',
+            changeOrigin: true,
+            rewrite: (path) => path.replace('/api/feed', '/feed'),
+          }
+        }
       },
       plugins: [react()],
       define: {

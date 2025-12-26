@@ -20,6 +20,7 @@ export interface FeedItem {
   feedId: string;
   title: string;
   author: string;
+  authorUrl?: string; // Author page or channel URL
   snippet: string;
   content: string; // HTML content for expanded view
   url: string;

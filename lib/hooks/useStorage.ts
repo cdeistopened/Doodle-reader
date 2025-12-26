@@ -27,6 +27,7 @@ import type { FeedItem, FeedSource as OldFeedSource } from '../../types';
 import { fetchFeed } from '../rss';
 import { transcribeAudio, hasApiKey, setApiKey, type TranscriptionProgress } from '../transcribe';
 import { polishTranscript, hasGeminiKey } from '../polish';
+import { getTranscript } from '../youtube';
 
 interface UseStorageReturn {
   // State
@@ -73,6 +74,9 @@ interface UseStorageReturn {
     processingTimeMs: number;
   }) => Promise<void>;
   documentCount: number;
+
+  // One-off video import
+  importVideo: (url: string) => Promise<void>;
 }
 
 export function useStorage(): UseStorageReturn {
@@ -482,6 +486,88 @@ export function useStorage(): UseStorageReturn {
     return items.filter(i => i.feedId === 'scanned-documents').length;
   }, [items]);
 
+  // Import a one-off YouTube video
+  const importVideo = useCallback(async (url: string) => {
+    // Extract video ID from URL
+    let videoId: string | null = null;
+
+    if (url.includes('youtube.com/watch')) {
+      const urlObj = new URL(url);
+      videoId = urlObj.searchParams.get('v');
+    } else if (url.includes('youtu.be/')) {
+      const match = url.match(/youtu\.be\/([^?&]+)/);
+      videoId = match ? match[1] : null;
+    }
+
+    if (!videoId) {
+      throw new Error('Invalid YouTube URL. Please use a youtube.com/watch or youtu.be link.');
+    }
+
+    // Fetch transcript
+    const transcript = await getTranscript(videoId);
+    if (!transcript) {
+      throw new Error('Could not fetch transcript. Make sure the video has captions enabled, or try starting the yt-transcript service.');
+    }
+
+    // Fetch video info from yt-transcript service
+    let title = `Video ${videoId}`;
+    let channel: string | null = null;
+    let channelUrl: string | null = null;
+    let description: string | null = null;
+
+    try {
+      const infoResponse = await fetch(`http://localhost:3002/info?v=${videoId}`);
+      if (infoResponse.ok) {
+        const info = await infoResponse.json();
+        title = info.title || title;
+        channel = info.channel || null;
+        channelUrl = info.channelUrl || null;
+        description = info.description || null;
+      }
+    } catch {
+      // Service not available, use video ID as title
+    }
+
+    const now = new Date().toISOString();
+    const id = `yt-oneoff-${videoId}`;
+
+    // Check if already imported
+    const existing = await storage.getDocument(id);
+    if (existing) {
+      throw new Error('This video has already been imported.');
+    }
+
+    // Create as an article document in the one-off-videos feed
+    const doc: ArticleDocument = {
+      id,
+      type: 'article',
+      source: 'youtube' as any,
+      title,
+      created: now,
+      modified: now,
+      status: 'complete',
+      content: transcript,
+      summary: transcript.substring(0, 300) + '...',
+      tags: ['video', 'one-off'],
+      article: {
+        url: `https://youtube.com/watch?v=${videoId}`,
+        feedId: 'one-off-videos',
+        feedUrl: 'oneoff://youtube',
+        siteName: channel || 'One-off Videos',
+        author: channel || undefined,
+        authorUrl: channelUrl || undefined,
+        pubDate: now,
+        isRead: false,
+        isStarred: false,
+        excerpt: description ? description.substring(0, 300) : 'YouTube video transcript',
+        mediaType: 'video',
+      },
+    };
+
+    await storage.saveDocument(doc);
+    await loadItems();
+  }, []);
+
   return {
     items,
     feeds,
@@ -510,5 +596,6 @@ export function useStorage(): UseStorageReturn {
     importFromOPML,
     saveScannedDocument,
     documentCount,
+    importVideo,
   };
 }

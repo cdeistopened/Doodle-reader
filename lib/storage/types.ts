@@ -71,13 +71,15 @@ export interface ArticleProperties {
   feedId: string;         // Reference to the feed
   feedUrl: string;        // RSS feed URL
   siteName: string;       // Blog/site name
-  author?: string;
+  author?: string;        // Author or channel name
+  authorUrl?: string;     // Author page or channel URL
   pubDate: string;        // Original publication date
   wordCount?: number;
   readTime?: number;      // Estimated minutes
   isRead: boolean;
   isStarred: boolean;
   excerpt?: string;       // First paragraph or manual excerpt
+  mediaType?: 'text' | 'video' | 'audio';  // Content type
 }
 
 /**

@@ -25,3 +25,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Dev utilities (not needed for production)
+temporary/
+
+# Content directories (user-generated, not in repo)
+content/

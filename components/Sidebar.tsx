@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Pencil, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search } from 'lucide-react';
+import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 
 interface SidebarProps {
   folders: Folder[];
@@ -30,18 +31,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   documentCount = 0,
 }) => {
   const [confirmUnsubscribe, setConfirmUnsubscribe] = useState<string | null>(null);
+  const [feedFilter, setFeedFilter] = useState('');
+
+  // Filter feeds using fuzzy search
+  const filteredFeeds = useMemo(() => {
+    const orphaned = feeds.filter(f => !f.folderId);
+    if (!feedFilter.trim()) return orphaned;
+    return fuzzySearchFeeds(orphaned, feedFilter);
+  }, [feeds, feedFilter]);
 
   const handleUnsubscribe = (feedId: string, _feedName: string) => {
     if (confirmUnsubscribe === feedId) {
-      // Second click - actually unsubscribe
       onUnsubscribe?.(feedId);
       setConfirmUnsubscribe(null);
-      // Navigate to inbox after unsubscribe
       onNavigate('all');
     } else {
-      // First click - show confirmation
       setConfirmUnsubscribe(feedId);
-      // Auto-clear after 3 seconds
       setTimeout(() => setConfirmUnsubscribe(null), 3000);
     }
   };
@@ -52,10 +57,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const totalUnread = getUnreadCount();
-  const starredCount = items.filter(i => i.isStarred).length; 
+  const starredCount = items.filter(i => i.isStarred).length;
   const videoCount = items.filter(i => i.mediaType === 'video').length;
-
-  const orphanedFeeds = feeds.filter(f => !f.folderId);
 
   const SidebarItem = ({
     label,
@@ -70,26 +73,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       onClick={onClick}
       className={`
-        flex items-center px-4 py-1.5 mx-0 sm:mx-2 rounded-r-full sm:rounded-full cursor-pointer select-none transition-colors mb-[2px] group relative
-        ${isActive ? 'bg-reader-select text-reader-select-text font-bold' : 'hover:bg-gray-200/50 text-reader-text font-medium'}
+        flex items-center px-3 py-2 mx-2 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group relative
+        ${isActive
+          ? 'bg-accent-soft text-ink font-medium'
+          : 'hover:bg-cream-dark text-ink-soft hover:text-ink'
+        }
       `}
     >
-      <div className="flex-shrink-0 w-6 mr-3 flex items-center justify-center">
+      <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
         {color ? (
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }}></div>
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }}></div>
         ) : (
-          <Icon size={18} className={isActive ? 'text-reader-active' : 'text-reader-secondary'} />
+          <Icon size={16} className={isActive ? 'text-accent' : 'text-ink-muted'} strokeWidth={1.5} />
         )}
       </div>
-      <span className={`flex-grow truncate text-[14px] ${isActive ? '' : 'text-reader-secondary'}`}>
+      <span className="flex-grow truncate text-sm">
         {label}
       </span>
       {count > 0 && !confirmUnsubscribe && (
-        <span className={`text-[12px] ml-2 ${isActive ? 'text-reader-select-text font-bold' : 'text-reader-secondary font-medium'}`}>
-          {count > 1000 ? '1K+' : count}
+        <span className={`text-xs tabular-nums ml-2 ${isActive ? 'text-accent font-medium' : 'text-ink-muted'}`}>
+          {count > 999 ? '999+' : count}
         </span>
       )}
-      {/* Unsubscribe button for feeds */}
       {isFeed && feedId && onUnsubscribe && (
         <button
           onClick={(e) => {
@@ -97,79 +102,80 @@ export const Sidebar: React.FC<SidebarProps> = ({
             handleUnsubscribe(feedId, label);
           }}
           className={`
-            ml-2 p-1 rounded-full transition-all
+            ml-2 p-1 rounded transition-all
             ${confirmUnsubscribe === feedId
-              ? 'bg-red-500 text-white'
-              : 'opacity-0 group-hover:opacity-100 hover:bg-red-100 text-red-500'
+              ? 'bg-status-error text-white'
+              : 'opacity-0 group-hover:opacity-100 hover:bg-status-error/10 text-status-error'
             }
           `}
           title={confirmUnsubscribe === feedId ? 'Click again to confirm' : 'Unsubscribe'}
         >
-          {confirmUnsubscribe === feedId ? (
-            <Trash2 size={14} />
-          ) : (
-            <X size={14} />
-          )}
+          {confirmUnsubscribe === feedId ? <Trash2 size={12} /> : <X size={12} />}
         </button>
       )}
     </div>
   );
 
   return (
-    <div className="w-[256px] bg-reader-sidebar flex-shrink-0 h-full overflow-y-auto flex flex-col font-sans pt-4 pb-4">
-      
-      {/* Doodle Logo */}
-      <div className="px-6 mb-4 flex items-center space-x-1 select-none">
-         <span className="text-2xl font-sans tracking-tight text-reader-blue font-normal">D</span>
-         <span className="text-2xl font-sans tracking-tight text-reader-red font-normal">o</span>
-         <span className="text-2xl font-sans tracking-tight text-reader-yellow font-normal">o</span>
-         <span className="text-2xl font-sans tracking-tight text-reader-blue font-normal">d</span>
-         <span className="text-2xl font-sans tracking-tight text-reader-green font-normal">l</span>
-         <span className="text-2xl font-sans tracking-tight text-reader-red font-normal mr-1.5">e</span>
-         <span className="text-xl font-sans text-gray-500 font-normal">Reader</span>
+    <div className="w-[260px] bg-cream-warm border-r border-border flex-shrink-0 h-full overflow-y-auto flex flex-col">
+
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-border">
+        <div className="flex items-center gap-2 select-none">
+          <div className="w-8 h-8 bg-accent border-2 border-ink rounded-md shadow-brutal-sm flex items-center justify-center">
+            <span className="font-mono text-white text-lg font-bold leading-none">d</span>
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="font-mono text-base font-bold text-ink tracking-tight">doodle</span>
+            <span className="font-mono text-[10px] text-ink-muted uppercase tracking-widest">reader</span>
+          </div>
+        </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="px-4 mb-6 space-y-2">
+      <div className="p-3 space-y-2">
         <button
           onClick={onSubscribe}
-          className="bg-reader-fab hover:bg-reader-fab-hover text-reader-select-text transition-all rounded-2xl h-14 w-36 flex items-center justify-center shadow-sm hover:shadow-md space-x-3"
+          className="w-full bg-accent hover:bg-accent-muted text-white transition-all rounded-md h-10 flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
         >
-          <Pencil size={20} className="text-reader-text" />
-          <span className="font-medium text-[14px]">Subscribe</span>
+          <Plus size={18} strokeWidth={2} />
+          <span className="font-medium text-sm">Subscribe</span>
         </button>
-        {onScanPdf && (
-          <button
-            onClick={onScanPdf}
-            className="bg-white hover:bg-gray-50 text-reader-text transition-all rounded-2xl h-10 w-36 flex items-center justify-center shadow-sm hover:shadow-md space-x-2 border border-gray-200 mb-2"
-          >
-            <ScanLine size={16} className="text-reader-secondary" />
-            <span className="font-medium text-[13px]">Scan PDF</span>
-          </button>
-        )}
 
-        {onFolderScan && (
-          <button
-            onClick={onFolderScan}
-            className="bg-white hover:bg-gray-50 text-reader-text transition-all rounded-2xl h-10 w-36 flex items-center justify-center shadow-sm hover:shadow-md space-x-2 border border-gray-200"
-          >
-            <FolderOpen size={16} className="text-reader-secondary" />
-            <span className="font-medium text-[13px]">Scan Folder</span>
-          </button>
-        )}
+        <div className="flex gap-2">
+          {onScanPdf && (
+            <button
+              onClick={onScanPdf}
+              className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+            >
+              <ScanLine size={14} strokeWidth={1.5} />
+              <span className="font-medium text-xs">PDF</span>
+            </button>
+          )}
+          {onFolderScan && (
+            <button
+              onClick={onFolderScan}
+              className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+            >
+              <FolderOpen size={14} strokeWidth={1.5} />
+              <span className="font-medium text-xs">Folder</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-grow">
-        <SidebarItem 
-          label="Inbox" 
-          icon={Inbox} 
+      {/* Navigation */}
+      <div className="flex-grow py-2">
+        <SidebarItem
+          label="Inbox"
+          icon={Inbox}
           count={totalUnread}
           isActive={activeFilter === 'all'}
           onClick={() => onNavigate('all')}
         />
-        <SidebarItem 
-          label="Starred" 
-          icon={Star} 
+        <SidebarItem
+          label="Starred"
+          icon={Star}
           count={starredCount}
           isActive={activeFilter === 'starred'}
           onClick={() => onNavigate('starred')}
@@ -189,32 +195,88 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => onNavigate('folder', 'documents')}
         />
 
-        <div className="my-3 border-t border-gray-200 mx-4"></div>
+        {/* Feeds Section */}
+        <div className="mt-4 pt-4 border-t border-border mx-3">
+          <div className="px-1 pb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Feeds</span>
+            <span className="text-xs text-ink-muted">{feeds.filter(f => !f.folderId).length}</span>
+          </div>
 
-        <div className="px-6 py-2 flex items-center justify-between group cursor-pointer">
-           <span className="text-[14px] font-medium text-reader-text">Feeds</span>
-           <span className="text-xs text-reader-active opacity-0 group-hover:opacity-100 font-medium">Edit</span>
+          {/* Feed Search */}
+          {feeds.filter(f => !f.folderId).length > 5 && (
+            <div className="relative mb-2">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                value={feedFilter}
+                onChange={(e) => setFeedFilter(e.target.value)}
+                placeholder="Filter feeds..."
+                className="w-full pl-7 pr-2 py-1.5 text-xs bg-surface border border-border rounded focus:outline-none focus:border-accent placeholder-ink-muted"
+              />
+              {feedFilter && (
+                <button
+                  onClick={() => setFeedFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+                >
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {filteredFeeds.map(feed => (
+            <SidebarItem
+              key={feed.id}
+              label={feed.name}
+              icon={Rss}
+              color={feed.color}
+              count={getUnreadCount(feed.id)}
+              isActive={activeFilter === 'feed' && activeId === feed.id}
+              onClick={() => onNavigate('feed', feed.id)}
+              isFeed={true}
+              feedId={feed.id}
+            />
+          ))}
+
+          {feedFilter && filteredFeeds.length === 0 && (
+            <div className="px-3 py-2 text-xs text-ink-muted italic">
+              No feeds match "{feedFilter}"
+            </div>
+          )}
+
+          {folders.map(folder => (
+            <div key={folder.id}>
+              <SidebarItem label={folder.name} icon={FolderIcon} count={0} isActive={false} onClick={() => {}} />
+            </div>
+          ))}
         </div>
-        
-        {orphanedFeeds.map(feed => (
-          <SidebarItem
-            key={feed.id}
-            label={feed.name}
-            icon={Rss}
-            color={feed.color}
-            count={getUnreadCount(feed.id)}
-            isActive={activeFilter === 'feed' && activeId === feed.id}
-            onClick={() => onNavigate('feed', feed.id)}
-            isFeed={true}
-            feedId={feed.id}
-          />
-        ))}
 
-        {folders.map(folder => (
-           <div key={folder.id}>
-             <SidebarItem label={folder.name} icon={FolderIcon} count={0} isActive={false} onClick={() => {}} />
-           </div>
-        ))}
+        {/* Utilities Section */}
+        <div className="mt-4 pt-4 border-t border-border mx-3">
+          <div className="px-1 pb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
+          </div>
+
+          <a
+            href="http://localhost:5001"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink"
+          >
+            <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
+              <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
+            </div>
+            <span className="flex-grow truncate text-sm">Page Snap</span>
+            <ExternalLink size={12} className="text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
+          </a>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="p-3 border-t border-border">
+        <div className="text-xs text-ink-muted text-center">
+          <span className="font-mono">⌘K</span> to search
+        </div>
       </div>
     </div>
   );

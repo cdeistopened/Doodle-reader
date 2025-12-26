@@ -16,9 +16,9 @@ const MAX_REQUEST_SIZE_MB = 20;
 const MAX_OUTPUT_TOKENS = 64000;
 
 // Based on testing: ~500-1000 tokens/page for dense content
-// PDFs are expensive (~28K tokens for 50 pages)
-// Use 40 pages per chunk to stay safely under output token limit
-const PAGES_PER_CHUNK = 40;
+// Large PDFs can have heavy images - use smaller chunks for reliability
+// 20 pages keeps chunk size manageable for scanned documents
+const PAGES_PER_CHUNK = 20;
 
 const OCR_PROMPT = `Convert this PDF document to clean Markdown.
 
@@ -56,6 +56,15 @@ Do NOT wrap output in code blocks. Do NOT add commentary, just the converted tex
 
 If this is not the first chunk, continue from where the previous section ended.`;
 
+export interface ChunkResult {
+  chunkNumber: number;
+  totalChunks: number;
+  startPage: number;
+  endPage: number;
+  content: string;
+  processingTimeMs: number;
+}
+
 export interface OCRProgress {
   status: 'reading' | 'analyzing' | 'processing' | 'completed' | 'error';
   message: string;
@@ -65,6 +74,10 @@ export interface OCRProgress {
   totalChunks?: number;
   currentFile?: string;
   totalFiles?: number;
+  // New: completed chunks available for immediate use
+  completedChunks?: ChunkResult[];
+  // New: partial content so far (concatenated completed chunks)
+  partialContent?: string;
 }
 
 export interface DocumentAnalysis {
@@ -157,56 +170,94 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Call Gemini API for OCR
+ * Call Gemini API for OCR with retry logic
  */
 async function callGeminiOCR(
   apiKey: string,
   pdfBase64: string,
-  prompt: string
+  prompt: string,
+  maxRetries: number = 3
 ): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
               {
-                inline_data: {
-                  mime_type: 'application/pdf',
-                  data: pdfBase64,
-                },
+                parts: [
+                  {
+                    inline_data: {
+                      mime_type: 'application/pdf',
+                      data: pdfBase64,
+                    },
+                  },
+                  { text: prompt },
+                ],
               },
-              { text: prompt },
             ],
-          },
-        ],
-        generationConfig: {
-          temperature: 1.0,
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-          thinkingConfig: {
-            thinkingLevel: 'low',
-          },
-        },
-      }),
+            generationConfig: {
+              temperature: 1.0,
+              maxOutputTokens: MAX_OUTPUT_TOKENS,
+              thinkingConfig: {
+                thinkingLevel: 'low',
+              },
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        const errorMsg = err.error?.message || `Gemini API Error: ${response.status}`;
+
+        // Check if it's a retryable error (500, 503, rate limit)
+        if (response.status >= 500 || response.status === 429) {
+          console.warn(`[OCR] Attempt ${attempt}/${maxRetries} failed: ${errorMsg}`);
+          lastError = new Error(errorMsg);
+
+          if (attempt < maxRetries) {
+            // Exponential backoff: 2s, 4s, 8s
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`[OCR] Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error('No content returned from Gemini');
+      }
+
+      return cleanLLMOutput(text);
+    } catch (error: any) {
+      lastError = error;
+
+      // Only retry on network errors or server errors
+      if (attempt < maxRetries && (error.message?.includes('fetch') || error.message?.includes('500'))) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[OCR] Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+        console.log(`[OCR] Retrying in ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(err.error?.message || `Gemini API Error: ${response.status}`);
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error('No content returned from Gemini');
-  }
-
-  return cleanLLMOutput(text);
+  throw lastError || new Error('All retry attempts failed');
 }
 
 /**
@@ -307,17 +358,26 @@ export async function processPDF(
       });
     } else {
       // Chunked processing for larger documents
-      const results: string[] = [];
+      // Track completed chunks for incremental progress reporting
+      const completedChunks: ChunkResult[] = [];
 
       for (let chunk = 0; chunk < numChunks; chunk++) {
         const startPage = chunk * pagesPerChunk;
         const endPage = Math.min(startPage + pagesPerChunk - 1, totalPages - 1);
+        const chunkStartTime = Date.now();
 
-        report('processing', `Processing pages ${startPage + 1}-${endPage + 1}...`, {
+        // Report progress with completed chunks so far
+        const partialContent = completedChunks.length > 0
+          ? completedChunks.map(c => c.content).join('\n\n---\n\n')
+          : undefined;
+
+        report('processing', `Processing chunk ${chunk + 1}/${numChunks} (pages ${startPage + 1}-${endPage + 1})...`, {
           currentPage: startPage + 1,
           totalPages,
           currentChunk: chunk + 1,
           totalChunks: numChunks,
+          completedChunks: completedChunks.length > 0 ? [...completedChunks] : undefined,
+          partialContent,
         });
 
         console.log(`[OCR] Chunk ${chunk + 1}/${numChunks}: pages ${startPage + 1}-${endPage + 1}`);
@@ -333,16 +393,61 @@ export async function processPDF(
         }
 
         // Process chunk with optimized prompt
-        const chunkPrompt = analysis 
+        const chunkPrompt = analysis
           ? createOptimizedPrompt(analysis, true, chunk + 1, numChunks)
           : OCR_CHUNK_PROMPT(chunk + 1, numChunks);
-        
-        const chunkContent = await callGeminiOCR(apiKey, chunkBase64, chunkPrompt);
-        results.push(chunkContent);
+
+        try {
+          const chunkContent = await callGeminiOCR(apiKey, chunkBase64, chunkPrompt);
+          const chunkProcessingTime = Date.now() - chunkStartTime;
+
+          // Save completed chunk immediately
+          const chunkResult: ChunkResult = {
+            chunkNumber: chunk + 1,
+            totalChunks: numChunks,
+            startPage: startPage + 1,
+            endPage: endPage + 1,
+            content: chunkContent,
+            processingTimeMs: chunkProcessingTime,
+          };
+          completedChunks.push(chunkResult);
+
+          console.log(`[OCR] ✓ Chunk ${chunk + 1}/${numChunks} complete (${chunkContent.length} chars, ${(chunkProcessingTime / 1000).toFixed(1)}s)`);
+
+          // Report chunk completion with updated partial content
+          const updatedPartialContent = completedChunks.map(c => c.content).join('\n\n---\n\n');
+          report('processing', `Chunk ${chunk + 1}/${numChunks} complete`, {
+            currentPage: endPage + 1,
+            totalPages,
+            currentChunk: chunk + 1,
+            totalChunks: numChunks,
+            completedChunks: [...completedChunks],
+            partialContent: updatedPartialContent,
+          });
+        } catch (error: any) {
+          // On chunk failure, report error but include partial results
+          const partialContent = completedChunks.length > 0
+            ? completedChunks.map(c => c.content).join('\n\n---\n\n')
+            : undefined;
+
+          console.error(`[OCR] ✗ Chunk ${chunk + 1}/${numChunks} failed: ${error.message}`);
+
+          // Re-throw with partial results attached
+          const enhancedError = new Error(
+            `Chunk ${chunk + 1}/${numChunks} failed: ${error.message}. ` +
+            `${completedChunks.length} chunks completed successfully.`
+          );
+          (enhancedError as any).partialResults = {
+            completedChunks,
+            partialContent,
+            failedAtChunk: chunk + 1,
+          };
+          throw enhancedError;
+        }
       }
 
       // Combine all chunks
-      fullContent = results.join('\n\n---\n\n');
+      fullContent = completedChunks.map(c => c.content).join('\n\n---\n\n');
     }
 
     const processingTimeMs = Date.now() - startTime;

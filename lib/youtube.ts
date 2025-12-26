@@ -1,5 +1,45 @@
 import { fetchRawContent } from './rss';
 
+// Configuration for the local yt-dlp transcript service
+const YT_TRANSCRIPT_SERVICE_URL = 'http://localhost:3002';
+
+/**
+ * Strategy 0: Use local yt-dlp service (MOST RELIABLE - gets auto-captions)
+ * Requires: npm start in projects/yt-transcript-service/
+ */
+async function tryLocalYtDlpService(videoId: string): Promise<string | null> {
+  try {
+    console.log(`[YouTube] Trying local yt-dlp service for ${videoId}...`);
+
+    const response = await fetch(
+      `${YT_TRANSCRIPT_SERVICE_URL}/transcript?v=${videoId}`,
+      { signal: AbortSignal.timeout(60000) } // 60s timeout for yt-dlp
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      console.log(`[YouTube] yt-dlp service error:`, error);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.transcript && data.transcript.length > 0) {
+      console.log(`[YouTube] Got ${data.length} chars from yt-dlp service`);
+      return data.transcript;
+    }
+
+    return null;
+  } catch (e: any) {
+    // Service not running or network error
+    if (e.name === 'TypeError' && e.message.includes('fetch')) {
+      console.log('[YouTube] yt-dlp service not running (start with: cd projects/yt-transcript-service && npm start)');
+    } else {
+      console.log('[YouTube] yt-dlp service failed:', e.message);
+    }
+    return null;
+  }
+}
+
 /**
  * Parse XML caption response into clean text
  */
@@ -143,31 +183,45 @@ async function tryInnertubeApi(videoId: string): Promise<string | null> {
 
 /**
  * Main function: tries multiple strategies to get transcript
+ *
+ * Priority:
+ * 1. Local yt-dlp service (most reliable, gets auto-captions)
+ * 2. Third-party API
+ * 3. Page scrape via CORS proxy
+ * 4. Innertube API
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
   console.log(`[YouTube] Fetching transcript for ${videoId}...`);
-  
-  // Strategy 1: Third-party API (most reliable, no CORS issues)
-  let transcript = await tryTranscriptApi(videoId);
+
+  // Strategy 0: Local yt-dlp service (BEST - gets auto-captions reliably)
+  let transcript = await tryLocalYtDlpService(videoId);
+  if (transcript) {
+    console.log("[YouTube] Success via local yt-dlp service");
+    return transcript;
+  }
+
+  // Strategy 1: Third-party API
+  transcript = await tryTranscriptApi(videoId);
   if (transcript) {
     console.log("[YouTube] Success via transcript API");
     return transcript;
   }
-  
+
   // Strategy 2: Page scrape via CORS proxy
   transcript = await tryPageScrape(videoId);
   if (transcript) {
     console.log("[YouTube] Success via page scrape");
     return transcript;
   }
-  
+
   // Strategy 3: Innertube API approach
   transcript = await tryInnertubeApi(videoId);
   if (transcript) {
     console.log("[YouTube] Success via innertube");
     return transcript;
   }
-  
-  console.warn("[YouTube] All strategies failed");
+
+  console.warn("[YouTube] All strategies failed. Try starting the yt-dlp service:");
+  console.warn("  cd projects/yt-transcript-service && npm start");
   return null;
 }

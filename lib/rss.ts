@@ -1,9 +1,11 @@
 import { FeedItem, FeedSource } from '../types';
 
 // Priority list of CORS proxies
-// 1. corsproxy.io - Generally faster, handles raw headers well
-// 2. allorigins.win/raw - Good backup, reliable
+// 1. Own server proxy - Works for all feeds including blocked ones (Megaphone, etc)
+// 2. corsproxy.io - Fallback for dev without server
+// 3. allorigins.win/raw - Last resort
 const PROXY_STRATEGIES = [
+  (url: string) => `/api/feed?url=${encodeURIComponent(url)}`,
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
 ];

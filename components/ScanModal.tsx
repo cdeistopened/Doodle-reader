@@ -76,9 +76,53 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose, onScanCom
       setProgress(null);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to process PDF');
+      // Check if we have partial results from a failed chunk
+      const partialResults = err.partialResults;
+      if (partialResults?.partialContent && partialResults.completedChunks?.length > 0) {
+        // Offer to save partial results
+        const completedChunks = partialResults.completedChunks.length;
+        const failedAt = partialResults.failedAtChunk;
+        setError(
+          `Processing failed at chunk ${failedAt}, but ${completedChunks} chunk(s) completed successfully. ` +
+          `Click "Save Partial" to keep what was processed.`
+        );
+        // Store partial results for potential save
+        (window as any).__partialOCRResults = {
+          content: partialResults.partialContent,
+          completedChunks: partialResults.completedChunks,
+        };
+      } else {
+        setError(err.message || 'Failed to process PDF');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSavePartial = async () => {
+    const partial = (window as any).__partialOCRResults;
+    if (!partial || !file) return;
+
+    try {
+      await onScanComplete(
+        `${title || titleFromFilename(file.name)} (partial)`,
+        partial.content,
+        {
+          pageCount: partial.completedChunks.reduce((sum: number, c: any) => sum + (c.endPage - c.startPage + 1), 0),
+          fileSizeMB: file.size / (1024 * 1024),
+          processingTimeMs: partial.completedChunks.reduce((sum: number, c: any) => sum + c.processingTimeMs, 0),
+        }
+      );
+
+      // Clean up
+      delete (window as any).__partialOCRResults;
+      setFile(null);
+      setTitle('');
+      setError(null);
+      setProgress(null);
+      onClose();
+    } catch (saveErr: any) {
+      setError(`Failed to save partial results: ${saveErr.message}`);
     }
   };
 
@@ -226,6 +270,16 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose, onScanCom
             >
               Cancel
             </button>
+            {/* Show Save Partial button when partial results are available */}
+            {error && (window as any).__partialOCRResults && (
+              <button
+                type="button"
+                onClick={handleSavePartial}
+                className="px-5 py-2 bg-amber-500 text-white font-medium text-sm rounded-full shadow-sm hover:shadow-md hover:bg-amber-600 transition-all"
+              >
+                Save Partial
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading || !file}
