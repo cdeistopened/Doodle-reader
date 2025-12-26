@@ -26,8 +26,11 @@ import {
 import type { FeedItem, FeedSource as OldFeedSource } from '../../types';
 import { fetchFeed } from '../rss';
 import { transcribeAudio, hasApiKey, setApiKey, type TranscriptionProgress } from '../transcribe';
+import { transcribeAudioWithGemini, hasGeminiApiKey } from '../transcribeGemini';
 import { polishTranscript, hasGeminiKey } from '../polish';
 import { getTranscript } from '../youtube';
+
+export type TranscriptionProvider = 'assemblyai' | 'gemini';
 
 interface UseStorageReturn {
   // State
@@ -49,8 +52,13 @@ interface UseStorageReturn {
   updateSummary: (itemId: string, summary: string) => Promise<void>;
 
   // Transcription
-  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void) => Promise<void>;
-  hasTranscriptionKey: () => boolean;
+  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<void>;
+  transcribeBatch: (
+    itemIds: string[],
+    onBatchProgress?: (progress: { completed: number; total: number; currentTitle?: string }) => void,
+    provider?: TranscriptionProvider
+  ) => Promise<{ succeeded: number; failed: number }>;
+  hasTranscriptionKey: (provider?: TranscriptionProvider) => boolean;
   setTranscriptionKey: (key: string) => void;
 
   // Folders
@@ -310,7 +318,8 @@ export function useStorage(): UseStorageReturn {
   // Transcription
   const transcribeItem = useCallback(async (
     itemId: string,
-    onProgress?: (progress: TranscriptionProgress) => void
+    onProgress?: (progress: TranscriptionProgress) => void,
+    provider: TranscriptionProvider = 'assemblyai'
   ) => {
     const item = items.find(i => i.id === itemId);
     if (!item || !item.audioUrl) {
@@ -334,23 +343,32 @@ export function useStorage(): UseStorageReturn {
         prev.map((i) => i.id === itemId ? { ...i, transcriptionStatus: 'processing' } : i)
       );
 
-      // Step 1: Transcribe with AssemblyAI
-      onProgress?.({ status: 'processing', message: 'Transcribing audio...' });
-      const result = await transcribeAudio(item.audioUrl, onProgress);
+      let finalContent: string;
 
-      // Step 2: Polish with Gemini (if API key available)
-      let finalContent = result.content;
-      if (hasGeminiKey()) {
-        try {
-          onProgress?.({ status: 'processing', message: 'Polishing transcript...' });
-          finalContent = await polishTranscript(
-            result.content,
-            contextPrompt,
-            item.title
-          );
-        } catch (polishError) {
-          // If polishing fails, just use raw transcript
-          console.warn('Transcript polishing failed, using raw transcript:', polishError);
+      if (provider === 'gemini') {
+        // Use Gemini for transcription
+        onProgress?.({ status: 'processing', message: 'Transcribing with Gemini...' });
+        const result = await transcribeAudioWithGemini(item.audioUrl, item.title, onProgress);
+        finalContent = result.content;
+      } else {
+        // Use AssemblyAI for transcription
+        onProgress?.({ status: 'processing', message: 'Transcribing audio...' });
+        const result = await transcribeAudio(item.audioUrl, onProgress);
+
+        // Polish with Gemini (if API key available)
+        finalContent = result.content;
+        if (hasGeminiKey()) {
+          try {
+            onProgress?.({ status: 'processing', message: 'Polishing transcript...' });
+            finalContent = await polishTranscript(
+              result.content,
+              contextPrompt,
+              item.title
+            );
+          } catch (polishError) {
+            // If polishing fails, just use raw transcript
+            console.warn('Transcript polishing failed, using raw transcript:', polishError);
+          }
         }
       }
 
@@ -374,8 +392,51 @@ export function useStorage(): UseStorageReturn {
     }
   }, [items, feeds]);
 
-  const hasTranscriptionKey = useCallback(() => hasApiKey(), []);
+  const hasTranscriptionKey = useCallback((provider: TranscriptionProvider = 'assemblyai') => {
+    return provider === 'gemini' ? hasGeminiApiKey() : hasApiKey();
+  }, []);
   const setTranscriptionKey = useCallback((key: string) => setApiKey(key), []);
+
+  // Batch transcription - processes items sequentially to avoid rate limits
+  const transcribeBatch = useCallback(async (
+    itemIds: string[],
+    onBatchProgress?: (progress: { completed: number; total: number; currentTitle?: string }) => void,
+    provider: TranscriptionProvider = 'assemblyai'
+  ): Promise<{ succeeded: number; failed: number }> => {
+    let succeeded = 0;
+    let failed = 0;
+
+    for (let i = 0; i < itemIds.length; i++) {
+      const itemId = itemIds[i];
+      const item = items.find(it => it.id === itemId);
+
+      onBatchProgress?.({
+        completed: i,
+        total: itemIds.length,
+        currentTitle: item?.title
+      });
+
+      try {
+        await transcribeItem(itemId, undefined, provider);
+        succeeded++;
+      } catch (e) {
+        console.error(`Failed to transcribe ${item?.title}:`, e);
+        failed++;
+      }
+
+      // Small delay between items to be respectful to the API
+      if (i < itemIds.length - 1) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    onBatchProgress?.({
+      completed: itemIds.length,
+      total: itemIds.length,
+    });
+
+    return { succeeded, failed };
+  }, [items, transcribeItem]);
 
   // Folder operations
   const createFolder = useCallback(async (name: string): Promise<Folder> => {
@@ -584,6 +645,7 @@ export function useStorage(): UseStorageReturn {
     markAllRead,
     updateSummary,
     transcribeItem,
+    transcribeBatch,
     hasTranscriptionKey,
     setTranscriptionKey,
     createFolder,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewMode } from '../types';
-import { Search, LayoutList, CheckCheck, RefreshCw, Layout } from 'lucide-react';
+import { Search, LayoutList, CheckCheck, RefreshCw, Layout, Mic } from 'lucide-react';
 import { AuthButton } from './AuthButton';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
   onMarkAllRead: () => void;
   onRefresh: () => void;
   unreadCount: number;
+  showBulkTranscribe?: boolean;
+  onBulkTranscribe?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,7 +18,9 @@ export const Header: React.FC<HeaderProps> = ({
   onSetViewMode,
   onMarkAllRead,
   onRefresh,
-  unreadCount
+  unreadCount,
+  showBulkTranscribe,
+  onBulkTranscribe,
 }) => {
   return (
     <div className="bg-cream px-4 py-3 flex items-center justify-between flex-shrink-0 z-10 sticky top-0 h-14 border-b border-border">
@@ -57,6 +61,18 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <CheckCheck size={18} strokeWidth={1.5} />
         </button>
+
+        {/* Bulk Transcribe - only shows for podcast feeds */}
+        {showBulkTranscribe && onBulkTranscribe && (
+          <button
+            onClick={onBulkTranscribe}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent-muted border-2 border-ink rounded-md shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all ml-2"
+            title="Bulk transcribe all episodes"
+          >
+            <Mic size={14} strokeWidth={1.5} />
+            <span>Transcribe All</span>
+          </button>
+        )}
 
         {/* View Toggle */}
         <div className="flex bg-surface-sunken border border-border rounded-lg p-0.5 ml-2">

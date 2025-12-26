@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
+import { BulkTranscribeModal } from './components/BulkTranscribeModal';
 import { ViewMode, FilterType } from './types';
 import { useStorage } from './lib/hooks/useStorage';
 
@@ -41,6 +42,7 @@ function App() {
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
   const [isScanOpen, setScanOpen] = useState(false);
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
+  const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
 
   const handleSubscribe = async (url: string) => {
     setSubscribeError(null);
@@ -198,6 +200,12 @@ function App() {
     if (viewMode === ViewMode.Detail) setViewMode(ViewMode.List);
   }, [filterType, filterId]);
 
+  // Check if current view is a podcast feed (has audio items)
+  const isPodcastFeed = useMemo(() => {
+    if (filterType !== 'feed' || !filterId) return false;
+    return filteredItems.some(item => item.mediaType === 'audio' && item.audioUrl);
+  }, [filterType, filterId, filteredItems]);
+
   const handleBatchScanComplete = async (results: Array<{
     title: string;
     content: string;
@@ -245,6 +253,8 @@ function App() {
           onMarkAllRead={handleMarkAllRead}
           onRefresh={refreshFeeds}
           unreadCount={filteredItems.filter(i => !i.isRead).length}
+          showBulkTranscribe={isPodcastFeed}
+          onBulkTranscribe={() => setBulkTranscribeOpen(true)}
         />
 
         {/* Error Banner */}
@@ -316,6 +326,13 @@ function App() {
         isOpen={isFolderScanOpen}
         onClose={() => setFolderScanOpen(false)}
         onScanComplete={handleBatchScanComplete}
+      />
+
+      <BulkTranscribeModal
+        isOpen={isBulkTranscribeOpen}
+        onClose={() => setBulkTranscribeOpen(false)}
+        items={filteredItems}
+        feedTitle={filterId ? feeds.find(f => f.id === filterId)?.title : undefined}
       />
     </div>
   );

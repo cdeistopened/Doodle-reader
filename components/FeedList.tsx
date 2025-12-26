@@ -7,6 +7,27 @@ import { TransformPanel } from './TransformPanel';
 import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
 
+// Format duration (handles both raw seconds "2652" and formatted "44:12")
+function formatDuration(duration: string | undefined): string {
+  if (!duration) return '';
+
+  // If it's just a number (seconds), convert to HH:MM:SS or MM:SS
+  if (/^\d+$/.test(duration)) {
+    const totalSeconds = parseInt(duration, 10);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Already formatted, return as-is
+  return duration;
+}
+
 interface FeedListProps {
   items: FeedItem[];
   feeds: FeedSource[];
@@ -328,7 +349,7 @@ export const FeedList: React.FC<FeedListProps> = ({
               {isPodcast && item.duration ? (
                 <span className="flex items-center">
                   <Clock size={10} className="mr-1" strokeWidth={1.5} />
-                  {item.duration}
+                  {formatDuration(item.duration)}
                 </span>
               ) : (
                 item.snippet
@@ -669,7 +690,7 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing }: Expand
               {item.duration && (
                 <p className="text-xs text-ink-muted font-sans flex items-center gap-1">
                   <Clock size={10} strokeWidth={1.5} />
-                  {item.duration}
+                  {formatDuration(item.duration)}
                 </p>
               )}
             </div>
