@@ -1,14 +1,15 @@
 /**
- * Doodle Reader - useStorage Hook
+ * Doodle Reader - useConvexStorageHook
  *
- * React hook that provides access to the storage layer with
- * automatic state management and reactivity.
+ * React hook that provides the same API as useStorage but uses Convex
+ * for persistence instead of IndexedDB.
  *
- * This replaces direct usage of the old `db` singleton.
+ * This hook wraps the ConvexStorageProvider context and adds all the
+ * business logic (RSS fetching, transcription, etc.) that the UI needs.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { storage } from '../storage';
+import { useState, useCallback, useMemo } from 'react';
+import { useConvexStorage } from '../storage/convex-provider';
 import type {
   Document,
   ArticleDocument,
@@ -26,7 +27,7 @@ import {
 import type { FeedItem, FeedSource as OldFeedSource } from '../../types';
 import { fetchFeed } from '../rss';
 import { transcribeAudio, hasApiKey, setApiKey, type TranscriptionProgress } from '../transcribe';
-import { transcribeAudioWithGemini, hasGeminiApiKey, type EpisodeMetadata } from '../transcribeGemini';
+import { transcribeAudioWithGemini, hasGeminiApiKey } from '../transcribeGemini';
 import { polishTranscript, hasGeminiKey } from '../polish';
 import { getTranscript } from '../youtube';
 
@@ -87,99 +88,50 @@ interface UseStorageReturn {
   importVideo: (url: string) => Promise<void>;
 }
 
-export function useStorage(): UseStorageReturn {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [feeds, setFeeds] = useState<OldFeedSource[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useConvexStorageHook(): UseStorageReturn {
+  const convex = useConvexStorage();
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
 
-  // Initialize and load data
-  useEffect(() => {
-    const init = async () => {
-      try {
-        await storage.init();
-        await loadAll();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to initialize storage');
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-
-    // Subscribe to storage events for reactivity
-    const unsubscribe = storage.subscribe((event) => {
-      // Reload relevant data based on event type
-      if (event.type.startsWith('document:')) {
-        loadItems();
-      } else if (event.type.startsWith('feed:')) {
-        loadFeeds();
-      } else if (event.type.startsWith('folder:')) {
-        loadFolders();
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const loadAll = async () => {
-    await Promise.all([loadItems(), loadFeeds(), loadFolders(), loadStats()]);
-  };
-
-  const loadItems = async () => {
-    const docs = await storage.queryDocuments({
-      type: 'article',
-      sortBy: 'pubDate',  // Sort by original publication date, not when added
-      sortOrder: 'desc',
-    });
-    const feedItems = docs
+  // Transform Convex data to the old FeedItem/FeedSource types for UI compatibility
+  const items = useMemo(() => {
+    return convex.documents
       .filter((d): d is ArticleDocument => d.type === 'article')
-      .map(toOldFeedItem);
-    setItems(feedItems);
-  };
+      .map(toOldFeedItem)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [convex.documents]);
 
-  const loadFeeds = async () => {
-    const newFeeds = await storage.queryFeeds();
-    setFeeds(newFeeds.map(toOldFeedSource));
-  };
+  const feeds = useMemo(() => {
+    return convex.feeds.map(toOldFeedSource);
+  }, [convex.feeds]);
 
-  const loadFolders = async () => {
-    const f = await storage.getFolders();
-    setFolders(f);
-  };
-
-  const loadStats = async () => {
-    const s = await storage.getStats();
-    setStats(s);
-  };
+  const loading = convex.isLoading || localLoading;
 
   // Subscribe to a new feed
   const subscribe = useCallback(async (url: string, onProgress?: (count: number) => void) => {
-    setLoading(true);
+    setLocalLoading(true);
     setError(null);
     try {
       const { source, items: newItems } = await fetchFeed(url);
 
       // Check for duplicate
-      const existing = await storage.getFeedByUrl(source.url);
+      const existing = convex.getFeedByUrl(source.url);
       if (existing) {
         throw new Error('Already subscribed to this feed');
       }
 
       // Convert and save feed
       const newFeed = convertFeedSource(source);
-      await storage.saveFeed(newFeed);
+      const feedId = await convex.saveFeed(newFeed);
 
       // Convert and save items with progress updates
       const docs = convertFeedItems(newItems, source.url, source.name);
       let savedCount = 0;
       for (const doc of docs) {
-        // Check if item already exists (by ID)
-        const existingDoc = await storage.getDocument(doc.id);
+        // Check if item already exists
+        const existingDoc = convex.getDocument(doc.id);
         if (!existingDoc) {
-          await storage.saveDocument(doc);
+          await convex.saveDocument(doc);
         }
         savedCount++;
         if (onProgress) {
@@ -188,57 +140,51 @@ export function useStorage(): UseStorageReturn {
       }
 
       // Update feed counts
-      await storage.updateFeedSyncState(newFeed.id, {
+      await convex.updateFeedSyncState(feedId, {
         lastFetched: new Date().toISOString(),
         itemCount: docs.length,
         unreadCount: docs.length,
       });
-
-      await loadAll();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to subscribe';
       setError(msg);
       throw e;
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
-  }, []);
+  }, [convex]);
 
   // Unsubscribe from a feed
   const unsubscribe = useCallback(async (feedId: string, deleteItems = true) => {
-    await storage.deleteFeed(feedId, deleteItems);
-    await loadAll();
-  }, []);
+    await convex.deleteFeed(feedId, deleteItems);
+  }, [convex]);
 
   // Refresh all feeds
   const refreshFeeds = useCallback(async () => {
-    setLoading(true);
+    setLocalLoading(true);
     setError(null);
     try {
-      const currentFeeds = await storage.queryFeeds();
-      for (const feed of currentFeeds) {
+      for (const feed of convex.feeds) {
         try {
           await refreshSingleFeed(feed);
         } catch (e) {
           console.warn(`Failed to refresh ${feed.name}:`, e);
-          await storage.updateFeedSyncState(feed.id, {
+          await convex.updateFeedSyncState(feed.id, {
             fetchError: e instanceof Error ? e.message : 'Unknown error',
           });
         }
       }
-      await loadAll();
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
-  }, []);
+  }, [convex]);
 
   // Refresh a single feed
   const refreshFeed = useCallback(async (feedId: string) => {
-    const feed = await storage.getFeed(feedId);
+    const feed = convex.getFeed(feedId);
     if (!feed) return;
     await refreshSingleFeed(feed);
-    await loadAll();
-  }, []);
+  }, [convex]);
 
   const refreshSingleFeed = async (feed: FeedSource) => {
     const { items: newItems } = await fetchFeed(feed.url);
@@ -246,15 +192,15 @@ export function useStorage(): UseStorageReturn {
 
     let newCount = 0;
     for (const doc of docs) {
-      const existingDoc = await storage.getDocument(doc.id);
+      const existingDoc = convex.getDocument(doc.id);
       if (!existingDoc) {
-        await storage.saveDocument(doc);
+        await convex.saveDocument(doc);
         newCount++;
       }
     }
 
     // Update feed state
-    const allFeedDocs = await storage.queryDocuments({ feedId: feed.id });
+    const allFeedDocs = convex.queryDocuments({ feedId: feed.id });
     const unreadCount = allFeedDocs.filter((d) => {
       if (d.type === 'article') {
         return !(d as ArticleDocument).article.isRead;
@@ -262,7 +208,7 @@ export function useStorage(): UseStorageReturn {
       return false;
     }).length;
 
-    await storage.updateFeedSyncState(feed.id, {
+    await convex.updateFeedSyncState(feed.id, {
       lastFetched: new Date().toISOString(),
       itemCount: allFeedDocs.length,
       unreadCount,
@@ -272,53 +218,33 @@ export function useStorage(): UseStorageReturn {
 
   // Mark item as read
   const markAsRead = useCallback(async (itemId: string, isRead = true) => {
-    await storage.markAsRead(itemId, isRead);
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, isRead } : item))
-    );
-  }, []);
+    await convex.markAsRead(itemId, isRead);
+  }, [convex]);
 
   // Toggle star
   const toggleStar = useCallback(async (itemId: string) => {
-    await storage.toggleStar(itemId);
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, isStarred: !item.isStarred } : item
-      )
-    );
-  }, []);
+    await convex.toggleStar(itemId);
+  }, [convex]);
 
   // Mark all as read
   const markAllRead = useCallback(async (feedId?: string) => {
     if (feedId) {
-      await storage.markFeedAsRead(feedId);
+      await convex.markFeedAsRead(feedId);
     } else {
       // Mark all articles as read
-      const docs = await storage.queryDocuments({ type: 'article', isRead: false });
-      for (const doc of docs) {
-        await storage.markAsRead(doc.id, true);
+      const unreadDocs = convex.documents.filter(
+        (d) => d.type === 'article' && !(d as ArticleDocument).article.isRead
+      );
+      for (const doc of unreadDocs) {
+        await convex.markAsRead(doc.id, true);
       }
     }
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) => {
-        if (feedId && item.feedId !== feedId) return item;
-        return { ...item, isRead: true };
-      })
-    );
-  }, []);
+  }, [convex]);
 
   // Update summary
   const updateSummary = useCallback(async (itemId: string, summary: string) => {
-    await storage.updateSummary(itemId, summary);
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, aiSummary: summary } : item
-      )
-    );
-  }, []);
+    await convex.updateSummary(itemId, summary);
+  }, [convex]);
 
   // Transcription
   const transcribeItem = useCallback(async (
@@ -335,34 +261,26 @@ export function useStorage(): UseStorageReturn {
     const feed = feeds.find(f => f.id === item.feedId);
     const contextPrompt = feed?.contextPrompt;
 
-    // Update status to pending
-    await storage.updateTranscriptionStatus(itemId, 'pending');
-    setItems((prev) =>
-      prev.map((i) => i.id === itemId ? { ...i, transcriptionStatus: 'pending' } : i)
-    );
+    // Get current document
+    const doc = convex.getDocument(itemId) as ArticleDocument | undefined;
+    if (!doc) throw new Error('Document not found');
+
+    // Use 'any' for extended article props (same pattern as adapters.ts)
+    const extendedArticle = doc.article as any;
 
     try {
       // Update status to processing
-      await storage.updateTranscriptionStatus(itemId, 'processing');
-      setItems((prev) =>
-        prev.map((i) => i.id === itemId ? { ...i, transcriptionStatus: 'processing' } : i)
-      );
+      await convex.saveDocument({
+        ...doc,
+        article: { ...extendedArticle, transcriptionStatus: 'processing' },
+      } as ArticleDocument);
 
       let finalContent: string;
 
       if (provider === 'gemini') {
-        // Use Gemini for transcription with full metadata
+        // Use Gemini for transcription
         onProgress?.({ status: 'processing', message: 'Transcribing with Gemini...' });
-        const result = await transcribeAudioWithGemini(item.audioUrl, item.title, onProgress, {
-          title: item.title,
-          feedName: feed?.name,
-          feedUrl: feed?.url,
-          author: item.author,
-          pubDate: new Date(item.timestamp).toISOString(),
-          duration: item.duration,
-          episodeUrl: item.url,
-          description: item.snippet,
-        });
+        const result = await transcribeAudioWithGemini(item.audioUrl, item.title, onProgress);
         finalContent = result.content;
       } else {
         // Use AssemblyAI for transcription
@@ -380,38 +298,34 @@ export function useStorage(): UseStorageReturn {
               item.title
             );
           } catch (polishError) {
-            // If polishing fails, just use raw transcript
             console.warn('Transcript polishing failed, using raw transcript:', polishError);
           }
         }
       }
 
       // Update with transcript
-      // DON'T set aiSummary here - that's reserved for polished content
-      await storage.updateTranscriptionStatus(itemId, 'complete', finalContent);
-      setItems((prev) =>
-        prev.map((i) => i.id === itemId ? {
-          ...i,
-          transcriptionStatus: 'complete',
-          content: finalContent,
-        } : i)
-      );
+      await convex.saveDocument({
+        ...doc,
+        content: finalContent,
+        article: { ...extendedArticle, transcriptionStatus: 'complete' },
+      } as ArticleDocument);
     } catch (e) {
       // Update status to error
-      await storage.updateTranscriptionStatus(itemId, 'error');
-      setItems((prev) =>
-        prev.map((i) => i.id === itemId ? { ...i, transcriptionStatus: 'error' } : i)
-      );
+      await convex.saveDocument({
+        ...doc,
+        article: { ...extendedArticle, transcriptionStatus: 'error' },
+      } as ArticleDocument);
       throw e;
     }
-  }, [items, feeds]);
+  }, [items, feeds, convex]);
 
   const hasTranscriptionKey = useCallback((provider: TranscriptionProvider = 'assemblyai') => {
     return provider === 'gemini' ? hasGeminiApiKey() : hasApiKey();
   }, []);
+
   const setTranscriptionKey = useCallback((key: string) => setApiKey(key), []);
 
-  // Batch transcription - processes items sequentially to avoid rate limits
+  // Batch transcription
   const transcribeBatch = useCallback(async (
     itemIds: string[],
     onBatchProgress?: (progress: { completed: number; total: number; currentTitle?: string }) => void,
@@ -438,7 +352,6 @@ export function useStorage(): UseStorageReturn {
         failed++;
       }
 
-      // Small delay between items to be respectful to the API
       if (i < itemIds.length - 1) {
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -454,65 +367,91 @@ export function useStorage(): UseStorageReturn {
 
   // Folder operations
   const createFolder = useCallback(async (name: string): Promise<Folder> => {
-    const existingFolders = await storage.getFolders();
-    const folder: Folder = {
-      id: crypto.randomUUID(),
+    const folderId = await convex.saveFolder({
       name,
       isOpen: true,
-      sortOrder: existingFolders.length,
+    });
+    return {
+      id: folderId,
+      name,
+      isOpen: true,
+      sortOrder: convex.folders.length,
     };
-    await storage.saveFolder(folder);
-    await loadFolders();
-    return folder;
-  }, []);
+  }, [convex]);
 
   const deleteFolder = useCallback(async (folderId: string) => {
-    await storage.deleteFolder(folderId);
-    await loadAll();
-  }, []);
+    await convex.deleteFolder(folderId);
+  }, [convex]);
 
   const moveFeedToFolder = useCallback(
     async (feedId: string, folderId: string | undefined) => {
-      const feed = await storage.getFeed(feedId);
+      const feed = convex.getFeed(feedId);
       if (feed) {
-        feed.folderId = folderId;
-        await storage.saveFeed(feed);
-        await loadFeeds();
+        await convex.saveFeed({
+          ...feed,
+          folderId,
+        });
       }
     },
-    []
+    [convex]
   );
 
   // Query operations
   const queryItems = useCallback(async (query: DocumentQuery): Promise<FeedItem[]> => {
-    const docs = await storage.queryDocuments({ ...query, type: 'article' });
+    const docs = convex.queryDocuments({ ...query, type: 'article' });
     return docs
       .filter((d): d is ArticleDocument => d.type === 'article')
       .map(toOldFeedItem);
-  }, []);
+  }, [convex]);
 
   const searchItems = useCallback(async (query: string): Promise<FeedItem[]> => {
-    const results = await storage.search(query, { types: ['article'] });
+    const results = await convex.search(query, 'article');
     return results
-      .map((r) => r.document)
       .filter((d): d is ArticleDocument => d.type === 'article')
       .map(toOldFeedItem);
-  }, []);
+  }, [convex]);
 
-  // Export operations
+  // Export operations (simplified for Convex - could be enhanced later)
   const exportToMarkdown = useCallback(async () => {
-    return storage.exportAsMarkdown();
-  }, []);
+    const result = new Map<string, string>();
+    for (const doc of convex.documents) {
+      result.set(`${doc.title}.md`, doc.content);
+    }
+    return result;
+  }, [convex]);
 
   const exportToOPML = useCallback(async () => {
-    return storage.exportAsOPML();
-  }, []);
+    const feedItems = convex.feeds
+      .map((f) => `    <outline type="rss" text="${f.name}" xmlUrl="${f.url}" />`)
+      .join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head><title>Doodle Reader Feeds</title></head>
+  <body>
+${feedItems}
+  </body>
+</opml>`;
+  }, [convex]);
 
   const importFromOPML = useCallback(async (opml: string) => {
-    const count = await storage.importFromOPML(opml);
-    await loadAll();
+    // Parse OPML and subscribe to feeds
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(opml, 'text/xml');
+    const outlines = doc.querySelectorAll('outline[xmlUrl]');
+    let count = 0;
+    for (const outline of outlines) {
+      const url = outline.getAttribute('xmlUrl');
+      if (url) {
+        try {
+          await subscribe(url);
+          count++;
+        } catch (e) {
+          console.warn(`Failed to import feed ${url}:`, e);
+        }
+      }
+    }
     return count;
-  }, []);
+  }, [subscribe]);
 
   // Save a scanned PDF document
   const saveScannedDocument = useCallback(async (
@@ -527,12 +466,10 @@ export function useStorage(): UseStorageReturn {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
 
-    // Create as a scan document stored as an ArticleDocument
-    // We use a special feedId 'scanned-documents' to group them
     const doc: ArticleDocument = {
       id,
       type: 'article',
-      source: 'scan' as any, // Using scan source type
+      source: 'scan' as any,
       title,
       created: now,
       modified: now,
@@ -552,9 +489,8 @@ export function useStorage(): UseStorageReturn {
       },
     };
 
-    await storage.saveDocument(doc);
-    await loadItems();
-  }, []);
+    await convex.saveDocument(doc);
+  }, [convex]);
 
   // Count scanned documents
   const documentCount = useMemo(() => {
@@ -563,7 +499,6 @@ export function useStorage(): UseStorageReturn {
 
   // Import a one-off YouTube video
   const importVideo = useCallback(async (url: string) => {
-    // Extract video ID from URL
     let videoId: string | null = null;
 
     if (url.includes('youtube.com/watch')) {
@@ -578,13 +513,11 @@ export function useStorage(): UseStorageReturn {
       throw new Error('Invalid YouTube URL. Please use a youtube.com/watch or youtu.be link.');
     }
 
-    // Fetch transcript
     const transcript = await getTranscript(videoId);
     if (!transcript) {
-      throw new Error('Could not fetch transcript. Make sure the video has captions enabled, or try starting the yt-transcript service.');
+      throw new Error('Could not fetch transcript. Make sure the video has captions enabled.');
     }
 
-    // Fetch video info from yt-transcript service
     let title = `Video ${videoId}`;
     let channel: string | null = null;
     let channelUrl: string | null = null;
@@ -600,19 +533,17 @@ export function useStorage(): UseStorageReturn {
         description = info.description || null;
       }
     } catch {
-      // Service not available, use video ID as title
+      // Service not available
     }
 
     const now = new Date().toISOString();
     const id = `yt-oneoff-${videoId}`;
 
-    // Check if already imported
-    const existing = await storage.getDocument(id);
+    const existing = convex.getDocument(id);
     if (existing) {
       throw new Error('This video has already been imported.');
     }
 
-    // Create as an article document in the one-off-videos feed
     const doc: ArticleDocument = {
       id,
       type: 'article',
@@ -639,17 +570,16 @@ export function useStorage(): UseStorageReturn {
       },
     };
 
-    await storage.saveDocument(doc);
-    await loadItems();
-  }, []);
+    await convex.saveDocument(doc);
+  }, [convex]);
 
   return {
     items,
     feeds,
-    folders,
+    folders: convex.folders,
     loading,
     error,
-    stats,
+    stats: convex.stats,
     subscribe,
     unsubscribe,
     refreshFeeds,

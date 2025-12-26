@@ -238,14 +238,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleNavigate('video')}
           />
           <SidebarItem
-            label="Processed"
+            label="Library"
             icon={Sparkles}
             count={processedCount}
             isActive={activeFilter === 'processed'}
             onClick={() => handleNavigate('processed')}
           />
           <SidebarItem
-            label="Documents"
+            label="Scans"
             icon={FileText}
             count={documentCount}
             isActive={activeFilter === 'folder' && activeId === 'documents'}

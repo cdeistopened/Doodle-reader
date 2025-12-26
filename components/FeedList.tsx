@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FeedItem, ViewMode, FeedSource } from '../types';
-import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X } from 'lucide-react';
+import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X, Zap } from 'lucide-react';
 import { getTranscript } from '../lib/youtube';
 import { TransformPanel } from './TransformPanel';
 import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
+import type { TranscriptionProvider } from '../lib/hooks/useStorage';
 
 // Format duration (handles both raw seconds "2652" and formatted "44:12")
 function formatDuration(duration: string | undefined): string {
@@ -39,8 +40,8 @@ interface FeedListProps {
   onNextItem: () => void;
   onPrevItem: () => void;
   viewMode: ViewMode;
-  onTranscribe?: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void) => Promise<void>;
-  hasTranscriptionKey?: () => boolean;
+  onTranscribe?: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<void>;
+  hasTranscriptionKey?: (provider?: TranscriptionProvider) => boolean;
   setTranscriptionKey?: (key: string) => void;
   onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
 }
@@ -67,12 +68,26 @@ export const FeedList: React.FC<FeedListProps> = ({
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  
+  // Transcription provider - default to Gemini (faster, cheaper, better speaker ID)
+  const [transcriptionProvider, setTranscriptionProvider] = useState<TranscriptionProvider>(() => {
+    const saved = localStorage.getItem('transcription_provider');
+    return (saved as TranscriptionProvider) || 'gemini';
+  });
+  
+  // Persist provider choice
+  const handleProviderChange = (provider: TranscriptionProvider) => {
+    setTranscriptionProvider(provider);
+    localStorage.setItem('transcription_provider', provider);
+  };
 
-  const handleTranscribe = async (itemId: string) => {
+  const handleTranscribe = async (itemId: string, provider?: TranscriptionProvider) => {
     if (!onTranscribe) return;
+    
+    const useProvider = provider || transcriptionProvider;
 
-    // Check for API key
-    if (hasTranscriptionKey && !hasTranscriptionKey()) {
+    // Check for API key based on provider
+    if (hasTranscriptionKey && !hasTranscriptionKey(useProvider)) {
       setShowApiKeyModal(true);
       return;
     }
@@ -83,7 +98,7 @@ export const FeedList: React.FC<FeedListProps> = ({
     try {
       await onTranscribe(itemId, (progress) => {
         setTranscribeProgress(progress.message);
-      });
+      }, useProvider);
       setTranscribeProgress('Complete!');
     } catch (error: any) {
       alert(`Transcription failed: ${error.message}`);
@@ -246,9 +261,11 @@ export const FeedList: React.FC<FeedListProps> = ({
               item={item}
               sourceName={sourceName}
               onToggleStar={onToggleStar}
-              onTranscribe={(id) => handleTranscribe(id)}
+              onTranscribe={(id, provider) => handleTranscribe(id, provider)}
               isTranscribing={transcribingId === item.id}
               onUpdateSummary={onUpdateSummary}
+              transcriptionProvider={transcriptionProvider}
+              onProviderChange={handleProviderChange}
             />
           </article>
         </div>
@@ -277,9 +294,11 @@ export const FeedList: React.FC<FeedListProps> = ({
                   item={item}
                   sourceName={getSourceName(item.feedId)}
                   onToggleStar={onToggleStar}
-                  onTranscribe={(id) => handleTranscribe(id)}
+                  onTranscribe={(id, provider) => handleTranscribe(id, provider)}
                   isTranscribing={transcribingId === item.id}
                   onUpdateSummary={onUpdateSummary}
+                  transcriptionProvider={transcriptionProvider}
+                  onProviderChange={handleProviderChange}
                 />
               </article>
             );
@@ -459,11 +478,23 @@ export const FeedList: React.FC<FeedListProps> = ({
             </div>
             <div className="p-5">
               <p className="text-ink-muted text-sm mb-4">
-                To transcribe podcasts, you need an AssemblyAI API key.
-                Get one free at{' '}
-                <a href="https://www.assemblyai.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:text-accent-muted underline">
-                  assemblyai.com
-                </a>
+                {transcriptionProvider === 'gemini' ? (
+                  <>
+                    To transcribe podcasts with Gemini, you need a Google AI API key.
+                    Get one free at{' '}
+                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-accent hover:text-accent-muted underline">
+                      aistudio.google.com
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    To transcribe podcasts with AssemblyAI, you need an API key.
+                    Get one free at{' '}
+                    <a href="https://www.assemblyai.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:text-accent-muted underline">
+                      assemblyai.com
+                    </a>
+                  </>
+                )}
               </p>
               <input
                 type="password"
@@ -603,12 +634,14 @@ interface ExpandedCardProps {
   item: FeedItem;
   sourceName: string;
   onToggleStar: any;
-  onTranscribe?: (itemId: string) => void;
+  onTranscribe?: (itemId: string, provider?: TranscriptionProvider) => void;
   isTranscribing?: boolean;
   onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
+  transcriptionProvider?: TranscriptionProvider;
+  onProviderChange?: (provider: TranscriptionProvider) => void;
 }
 
-const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdateSummary }: ExpandedCardProps) => {
+const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdateSummary, transcriptionProvider = 'gemini', onProviderChange }: ExpandedCardProps) => {
   // Transform outputs - can have multiple
   // Initialize with saved aiSummary if it exists (persists polished content across navigation)
   const [transformOutputs, setTransformOutputs] = useState<Array<{ id: string; title: string; content: string }>>(() => {
@@ -798,16 +831,53 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
                 <Loader2 size={20} className="animate-spin" />
               </div>
             ) : (
-              <button
-                onClick={() => onTranscribe?.(item.id)}
-                disabled={!onTranscribe}
-                className="flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-muted border-2 border-ink px-4 py-2.5 rounded-md shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all font-sans flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Mic size={16} strokeWidth={1.5} />
-                <span>Transcribe</span>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Provider Toggle */}
+                <div className="flex items-center bg-cream-warm rounded-md border border-border p-0.5">
+                  <button
+                    onClick={() => onProviderChange?.('gemini')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-all ${
+                      transcriptionProvider === 'gemini'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                    title="Gemini 3 Flash - Fast, cheap, identifies speakers by name"
+                  >
+                    <Zap size={12} strokeWidth={2} />
+                    <span>Gemini</span>
+                  </button>
+                  <button
+                    onClick={() => onProviderChange?.('assemblyai')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-all ${
+                      transcriptionProvider === 'assemblyai'
+                        ? 'bg-accent text-white shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                    title="AssemblyAI - Traditional, reliable"
+                  >
+                    <Mic size={12} strokeWidth={2} />
+                    <span>Assembly</span>
+                  </button>
+                </div>
+                <button
+                  onClick={() => onTranscribe?.(item.id, transcriptionProvider)}
+                  disabled={!onTranscribe}
+                  className="flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-muted border-2 border-ink px-4 py-2.5 rounded-md shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all font-sans disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Mic size={16} strokeWidth={1.5} />
+                  <span>Transcribe</span>
+                </button>
+              </div>
             )}
           </div>
+          {/* Provider info */}
+          {!(isTranscribing || item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending') && (
+            <p className="text-xs text-ink-muted mt-3 font-sans">
+              {transcriptionProvider === 'gemini' 
+                ? '⚡ Gemini: ~50x cheaper, identifies speakers by name' 
+                : '🎙️ AssemblyAI: Traditional, reliable transcription'}
+            </p>
+          )}
           {item.transcriptionStatus === 'error' && (
             <p className="text-xs text-status-error mt-3 font-sans">Transcription failed. Try again.</p>
           )}

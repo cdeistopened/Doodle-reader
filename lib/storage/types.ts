@@ -57,6 +57,10 @@ export interface BaseDocument {
 
   // Source tracking
   source: SourceType;
+
+  // Content assets: raw, polished, summaries, insights
+  // Tracks lineage between original and derived content
+  assets?: DocumentAssets;
 }
 
 // =============================================================================
@@ -141,6 +145,75 @@ export interface NewsletterProperties {
   receivedDate: string;
   isRead: boolean;
   isStarred: boolean;
+}
+
+// =============================================================================
+// CONTENT ASSETS (Raw, Polished, Summaries, Insights)
+// =============================================================================
+
+/**
+ * Raw content from original source (transcription, OCR, RSS fetch)
+ */
+export interface RawContent {
+  content: string;
+  generatedAt: string;          // ISO date
+  source: 'assemblyai' | 'gemini-transcribe' | 'youtube-captions' | 'ocr' | 'rss-fetch';
+  durationMs?: number;          // For transcripts
+  wordCount?: number;
+  confidence?: number;          // 0-1, transcription/OCR confidence
+}
+
+/**
+ * Polished/edited version of content
+ */
+export interface PolishedContent {
+  content: string;
+  generatedAt: string;          // ISO date
+  model: string;                // e.g., "gemini-3-flash-preview"
+  contextPrompt?: string;       // Feed-specific context used
+  editedByUser?: boolean;       // Was it manually edited after AI polish?
+}
+
+/**
+ * Summary entry (can have multiple types per document)
+ */
+export interface SummaryEntry {
+  type: 'tldr' | 'detailed' | 'bullets' | 'executive' | 'custom';
+  content: string;
+  generatedAt: string;          // ISO date
+  model: string;
+  prompt?: string;              // Custom prompt if used
+}
+
+/**
+ * Extracted insights (quotes, action items, entities, etc.)
+ */
+export interface InsightsData {
+  topics?: string[];
+  keyPoints?: string[];
+  quotes?: Array<{
+    text: string;
+    speaker?: string;
+    timestamp?: string;
+  }>;
+  actionItems?: string[];
+  entities?: Array<{
+    name: string;
+    type: string;               // "person", "company", "product", etc.
+  }>;
+  generatedAt: string;          // ISO date
+  model: string;
+}
+
+/**
+ * All content assets for a document
+ * Tracks lineage between raw and derived content
+ */
+export interface DocumentAssets {
+  raw?: RawContent;
+  polished?: PolishedContent;
+  summaries?: SummaryEntry[];
+  insights?: InsightsData;
 }
 
 // =============================================================================

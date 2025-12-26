@@ -1,16 +1,49 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Sidebar, MobileMenuButton } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
 import { FeedList } from './components/FeedList';
 import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
-import { ViewMode, FilterType } from './types';
-import { useStorage, useMobile } from './lib/hooks';
+import { ViewMode, FilterType, FeedItem, FeedSource } from './types';
+import { useStorage, useConvexStorageHook, useMobile } from './lib/hooks';
+import { ConvexStorageProvider } from './lib/storage/convex-provider';
+import type { Folder } from './lib/storage';
 
-function App() {
-  // Use the new unified storage hook - replaces direct db usage
+export type StorageMode = 'local' | 'convex';
+
+interface AppProps {
+  storageMode?: StorageMode;
+}
+
+// Type for the storage hook return value (both hooks return the same shape)
+interface StorageHookReturn {
+  items: FeedItem[];
+  feeds: FeedSource[];
+  folders: Folder[];
+  loading: boolean;
+  error: string | null;
+  subscribe: (url: string, onProgress?: (count: number) => void) => Promise<void>;
+  unsubscribe: (feedId: string, deleteItems?: boolean) => Promise<void>;
+  refreshFeeds: () => Promise<void>;
+  markAsRead: (itemId: string, isRead?: boolean) => Promise<void>;
+  toggleStar: (itemId: string) => Promise<void>;
+  markAllRead: (feedId?: string) => Promise<void>;
+  updateSummary: (itemId: string, summary: string) => Promise<void>;
+  transcribeItem: (itemId: string, onProgress?: any, provider?: any) => Promise<void>;
+  hasTranscriptionKey: (provider?: any) => boolean;
+  setTranscriptionKey: (key: string) => void;
+  saveScannedDocument: (title: string, content: string, metadata: any) => Promise<void>;
+  documentCount: number;
+  importVideo: (url: string) => Promise<void>;
+}
+
+/**
+ * Main app content - receives storage operations as props.
+ * This component contains all the UI logic and is storage-agnostic.
+ */
+function AppContent({ storage }: { storage: StorageHookReturn }) {
   const {
     items,
     feeds,
@@ -30,7 +63,7 @@ function App() {
     saveScannedDocument,
     documentCount,
     importVideo,
-  } = useStorage();
+  } = storage;
 
   const isMobile = useMobile();
 
@@ -77,25 +110,20 @@ function App() {
     } else if (filterType === 'video') {
       result = items.filter(i => i.mediaType === 'video');
     } else if (filterType === 'processed') {
-      // Processed filter - show items with completed transcriptions
       result = items.filter(i => i.transcriptionStatus === 'complete');
     } else if (filterType === 'folder' && filterId === 'documents') {
-      // Documents filter - show scanned PDFs
       result = items.filter(i => i.feedId === 'scanned-documents');
     } else if (filterType === 'feed' && filterId) {
       result = items.filter(i => i.feedId === filterId);
     }
 
-    // Apply sorting
     const sorted = [...result].sort((a, b) => {
       switch (sortOrder) {
         case 'oldest':
           return a.timestamp - b.timestamp;
         case 'longest':
-          // Sort by content length (longer first)
           return (b.content?.length || 0) - (a.content?.length || 0);
         case 'shortest':
-          // Sort by content length (shorter first)
           return (a.content?.length || 0) - (b.content?.length || 0);
         case 'newest':
         default:
@@ -106,14 +134,11 @@ function App() {
     return sorted;
   }, [items, filterType, filterId, sortOrder]);
 
-  // Actions
   const handleOpenItem = useCallback((id: string) => {
     setExpandedId(id);
     if (viewMode === ViewMode.List) {
-       setViewMode(ViewMode.Detail);
+      setViewMode(ViewMode.Detail);
     }
-
-    // Mark as read
     const item = items.find(i => i.id === id);
     if (item && !item.isRead) {
       markAsRead(item.id, true);
@@ -143,23 +168,23 @@ function App() {
   }, [filterType, filterId, markAllRead]);
 
   const handleNextItem = useCallback(() => {
-     if (selectedIndex < filteredItems.length - 1) {
-        const nextIndex = selectedIndex + 1;
-        setSelectedIndex(nextIndex);
-        if (viewMode === ViewMode.Detail) {
-           handleOpenItem(filteredItems[nextIndex].id);
-        }
-     }
+    if (selectedIndex < filteredItems.length - 1) {
+      const nextIndex = selectedIndex + 1;
+      setSelectedIndex(nextIndex);
+      if (viewMode === ViewMode.Detail) {
+        handleOpenItem(filteredItems[nextIndex].id);
+      }
+    }
   }, [selectedIndex, filteredItems, viewMode, handleOpenItem]);
 
   const handlePrevItem = useCallback(() => {
-     if (selectedIndex > 0) {
-        const prevIndex = selectedIndex - 1;
-        setSelectedIndex(prevIndex);
-        if (viewMode === ViewMode.Detail) {
-           handleOpenItem(filteredItems[prevIndex].id);
-        }
-     }
+    if (selectedIndex > 0) {
+      const prevIndex = selectedIndex - 1;
+      setSelectedIndex(prevIndex);
+      if (viewMode === ViewMode.Detail) {
+        handleOpenItem(filteredItems[prevIndex].id);
+      }
+    }
   }, [selectedIndex, filteredItems, viewMode, handleOpenItem]);
 
   // Keyboard Navigation
@@ -170,27 +195,27 @@ function App() {
       const currentItem = filteredItems[selectedIndex];
 
       switch (e.key.toLowerCase()) {
-        case 'j': // Next
+        case 'j':
           e.preventDefault();
           handleNextItem();
           break;
-        case 'k': // Previous
+        case 'k':
           e.preventDefault();
           handlePrevItem();
           break;
-        case 'm': // Toggle Read
+        case 'm':
           e.preventDefault();
           if (currentItem) {
             markAsRead(currentItem.id, !currentItem.isRead);
           }
           break;
-        case 's': // Toggle Star
+        case 's':
           e.preventDefault();
           if (currentItem) {
             handleToggleStar(null, currentItem.id);
           }
           break;
-        case 'v': // View Original
+        case 'v':
           e.preventDefault();
           if (currentItem) window.open(currentItem.url, '_blank');
           break;
@@ -198,12 +223,12 @@ function App() {
         case 'o':
           e.preventDefault();
           if (currentItem) {
-             handleOpenItem(currentItem.id);
+            handleOpenItem(currentItem.id);
           }
           break;
         case 'escape':
           if (viewMode === ViewMode.Detail) {
-             handleBackToList();
+            handleBackToList();
           }
           break;
         case '1':
@@ -226,7 +251,6 @@ function App() {
     if (viewMode === ViewMode.Detail) setViewMode(ViewMode.List);
   }, [filterType, filterId]);
 
-  // Check if current view is a podcast feed (has audio items)
   const isPodcastFeed = useMemo(() => {
     if (filterType !== 'feed' || !filterId) return false;
     return filteredItems.some(item => item.mediaType === 'audio' && item.audioUrl);
@@ -235,14 +259,9 @@ function App() {
   const handleBatchScanComplete = async (results: Array<{
     title: string;
     content: string;
-    metadata: {
-      pageCount: number;
-      fileSizeMB: number;
-      processingTimeMs: number;
-    };
+    metadata: { pageCount: number; fileSizeMB: number; processingTimeMs: number };
     fileName: string;
   }>) => {
-    // Save each result individually to storage
     for (const result of results) {
       await saveScannedDocument(result.title, result.content, result.metadata);
     }
@@ -250,7 +269,6 @@ function App() {
 
   return (
     <div className="flex h-screen w-screen bg-cream text-ink font-sans overflow-hidden">
-      
       <Sidebar
         folders={folders}
         feeds={feeds}
@@ -275,8 +293,8 @@ function App() {
         <Header
           viewMode={viewMode}
           onSetViewMode={(mode) => {
-             setViewMode(mode);
-             if (mode === ViewMode.List) setExpandedId(null);
+            setViewMode(mode);
+            if (mode === ViewMode.List) setExpandedId(null);
           }}
           onMarkAllRead={handleMarkAllRead}
           onRefresh={refreshFeeds}
@@ -289,7 +307,6 @@ function App() {
           isMobile={isMobile}
         />
 
-        {/* Error Banner */}
         {error && (
           <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-red-400 text-sm">
             {error}
@@ -298,25 +315,25 @@ function App() {
 
         {loading ? (
           <div className="flex-grow flex items-center justify-center text-gray-500">
-             <div className="flex flex-col items-center">
-                <div className="w-8 h-8 border-4 border-reader-active border-t-transparent rounded-full animate-spin mb-4"></div>
-                Loading...
-             </div>
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 border-4 border-reader-active border-t-transparent rounded-full animate-spin mb-4"></div>
+              Loading...
+            </div>
           </div>
         ) : filteredItems.length === 0 ? (
-           <div className="flex-grow flex items-center justify-center">
-              <div className="text-gray-500 text-center">
-                <p className="mb-4 text-lg">No items to display.</p>
-                {feeds.length === 0 && (
-                   <button 
-                     onClick={() => setSubscribeOpen(true)}
-                     className="bg-reader-active text-white px-6 py-2 rounded-full font-medium shadow-sm hover:shadow-md transition-all"
-                   >
-                     Add your first feed
-                   </button>
-                )}
-              </div>
-           </div>
+          <div className="flex-grow flex items-center justify-center">
+            <div className="text-gray-500 text-center">
+              <p className="mb-4 text-lg">No items to display.</p>
+              {feeds.length === 0 && (
+                <button
+                  onClick={() => setSubscribeOpen(true)}
+                  className="bg-reader-active text-white px-6 py-2 rounded-full font-medium shadow-sm hover:shadow-md transition-all"
+                >
+                  Add your first feed
+                </button>
+              )}
+            </div>
+          </div>
         ) : (
           <FeedList
             items={filteredItems}
@@ -369,6 +386,40 @@ function App() {
       />
     </div>
   );
+}
+
+/**
+ * Local storage wrapper - uses IndexedDB via useStorage hook
+ */
+function LocalApp() {
+  const storage = useStorage();
+  return <AppContent storage={storage} />;
+}
+
+/**
+ * Convex storage wrapper - uses Convex cloud storage
+ * Must be rendered inside ConvexStorageProvider
+ */
+function ConvexApp() {
+  const storage = useConvexStorageHook();
+  return <AppContent storage={storage} />;
+}
+
+/**
+ * Main App component - chooses storage backend based on storageMode prop
+ */
+function App({ storageMode = 'local' }: AppProps) {
+  if (storageMode === 'convex') {
+    // Convex mode requires the ConvexStorageProvider wrapper
+    return (
+      <ConvexStorageProvider>
+        <ConvexApp />
+      </ConvexStorageProvider>
+    );
+  }
+
+  // Default: local IndexedDB storage
+  return <LocalApp />;
 }
 
 export default App;

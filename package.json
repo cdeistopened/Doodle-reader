@@ -18,6 +18,7 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.59.2",
     "@google/genai": "^1.32.0",
+    "convex": "^1.31.2",
     "lucide-react": "^0.460.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
