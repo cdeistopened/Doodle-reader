@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FeedItem, ViewMode, FeedSource } from '../types';
-import { Star, ExternalLink, Sparkles, Loader2, Share2, Mail, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, Printer, FileText, PenTool, Clock, Check, Key, Mic } from 'lucide-react';
-import { generateArticleSummary } from '../lib/ai';
-import { polishTranscript } from '../lib/polish';
+import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X } from 'lucide-react';
 import { getTranscript } from '../lib/youtube';
 import { storage } from '../lib/storage';
+import { TransformPanel } from './TransformPanel';
+import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
 
 interface FeedListProps {
@@ -106,113 +106,157 @@ export const FeedList: React.FC<FeedListProps> = ({
   // --- DETAIL VIEW (READING MODE) ---
   if (viewMode === ViewMode.Detail && expandedId) {
     const item = items.find(i => i.id === expandedId);
-    if (!item) return <div>Item not found</div>;
+    if (!item) return <div className="flex-grow flex items-center justify-center text-ink-muted">Item not found</div>;
 
     const sourceName = getSourceName(item.feedId);
-    const feed = feeds.find(f => f.id === item.feedId);
-    const domain = feed?.siteUrl ? new URL(feed.siteUrl).hostname : '';
 
     return (
-      <div className="flex-grow flex flex-col h-full bg-white rounded-tl-2xl rounded-bl-2xl shadow-sm overflow-hidden border border-gray-200/50 ml-2 mt-2 mb-2 mr-2">
-         {/* Detail Header */}
-         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center space-x-4">
-               <button onClick={onBackToList} className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors" title="Back to Inbox">
-                  <ArrowLeft size={20} />
-               </button>
-               <div className="h-6 w-[1px] bg-gray-200"></div>
-               <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors" title="Archive">
-                  <CheckCircle2 size={20} />
-               </button>
-               <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors" title="Delete">
-                  <Mail size={20} />
-               </button>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-               <span className="text-sm text-gray-500 mr-2">
-                 {items.findIndex(i => i.id === expandedId) + 1} of {items.length}
-               </span>
-               <button onClick={onPrevItem} className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors">
-                  <ChevronLeft size={20} />
-               </button>
-               <button onClick={onNextItem} className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors">
-                  <ChevronRight size={20} />
-               </button>
-            </div>
-         </div>
+      <div className="flex-grow flex flex-col h-full bg-cream overflow-hidden">
+        {/* Reading Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onBackToList}
+              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+              title="Back to list"
+            >
+              <ArrowLeft size={18} strokeWidth={1.5} />
+            </button>
+            <div className="h-5 w-px bg-border mx-1"></div>
+            <button className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors" title="Archive">
+              <CheckCircle2 size={18} strokeWidth={1.5} />
+            </button>
+          </div>
 
-         {/* Content Scroll Area */}
-         <div className="flex-grow overflow-y-auto p-8 bg-white">
-            <div className="max-w-4xl mx-auto">
-               {/* Email-like Subject Header */}
-               <div className="mb-8">
-                  <div className="flex items-start justify-between mb-4">
-                     <h1 className="text-[22px] leading-snug font-normal text-black font-sans">{item.title}</h1>
-                     <div className="flex-shrink-0 ml-4">
-                        <button className="bg-gray-100 hover:bg-gray-200 text-xs font-medium px-2 py-1 rounded text-gray-600">
-                           Inbox
-                        </button>
-                     </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                     <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-reader-blue text-white flex items-center justify-center font-bold text-lg uppercase mr-3 select-none">
-                           {sourceName.substring(0, 1)}
-                        </div>
-                        <div>
-                           <div className="text-sm font-bold text-black flex items-center">
-                              {items.find(i => i.id === expandedId)?.author || sourceName}
-                           </div>
-                           <div className="text-xs text-gray-500">
-                              to me
-                           </div>
-                        </div>
-                     </div>
-                     <div className="text-xs text-gray-500 flex items-center space-x-3">
-                        <span>{new Date(item.timestamp).toLocaleString()}</span>
-                        <button onClick={(e) => onToggleStar(e, item.id)}>
-                           <Star size={18} className={item.isStarred ? 'fill-reader-yellow text-reader-yellow' : 'text-gray-400 hover:text-gray-600'} />
-                        </button>
-                        <button>
-                           <Share2 size={18} className="text-gray-400 hover:text-gray-600" />
-                        </button>
-                     </div>
-                  </div>
-               </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-ink-muted tabular-nums mr-2">
+              {items.findIndex(i => i.id === expandedId) + 1} / {items.length}
+            </span>
+            <button
+              onClick={onPrevItem}
+              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+            >
+              <ChevronLeft size={18} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={onNextItem}
+              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+            >
+              <ChevronRight size={18} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
 
-               {/* Body */}
-               <div className="mt-8">
-                  <ExpandedCard item={item} sourceName={sourceName} onToggleStar={onToggleStar} />
-               </div>
-            </div>
-         </div>
+        {/* Content Scroll Area */}
+        <div className="flex-grow overflow-y-auto p-6 md:p-8">
+          <article className="max-w-3xl mx-auto">
+            {/* Article Header */}
+            <header className="mb-8 pb-6 border-b border-border">
+              <h1 className="font-serif text-2xl md:text-3xl font-semibold text-ink leading-tight mb-4">
+                {item.title}
+              </h1>
+
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-md bg-accent text-white flex items-center justify-center font-semibold text-sm uppercase select-none">
+                    {(item.author || sourceName).substring(0, 1)}
+                  </div>
+                  <div>
+                    {/* Channel/Author name - linked if we have authorUrl */}
+                    {item.authorUrl ? (
+                      <a
+                        href={item.authorUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-medium text-ink hover:text-accent transition-colors"
+                      >
+                        {item.author || sourceName}
+                      </a>
+                    ) : (
+                      <div className="text-sm font-medium text-ink">
+                        {item.author || sourceName}
+                      </div>
+                    )}
+                    {/* Date with open original link */}
+                    <div className="text-xs text-ink-muted flex items-center gap-2">
+                      <span>
+                        {new Date(item.timestamp).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                      <span className="text-border">•</span>
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-accent transition-colors flex items-center gap-1"
+                      >
+                        <ExternalLink size={10} strokeWidth={1.5} />
+                        <span>Open original</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => onToggleStar(e, item.id)}
+                    className="p-2 hover:bg-cream-warm rounded-md transition-colors"
+                  >
+                    <Star
+                      size={18}
+                      strokeWidth={1.5}
+                      className={item.isStarred ? 'fill-status-warning text-status-warning' : 'text-ink-muted hover:text-ink'}
+                    />
+                  </button>
+                  <button className="p-2 hover:bg-cream-warm rounded-md transition-colors">
+                    <Share2 size={18} strokeWidth={1.5} className="text-ink-muted hover:text-ink" />
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            {/* Body */}
+            <ExpandedCard
+              item={item}
+              sourceName={sourceName}
+              onToggleStar={onToggleStar}
+              onTranscribe={(id) => handleTranscribe(id)}
+              isTranscribing={transcribingId === item.id}
+            />
+          </article>
+        </div>
       </div>
     );
   }
 
-  // --- STREAM VIEW (Classic Reader) ---
+  // --- STREAM VIEW (Card Grid) ---
   if (viewMode === ViewMode.Expanded) {
     return (
-      <div className="flex-grow overflow-y-auto bg-reader-bg p-4" ref={containerRef}>
-        <div className="max-w-3xl mx-auto space-y-4 pb-20">
+      <div className="flex-grow overflow-y-auto bg-cream p-6" ref={containerRef}>
+        <div className="max-w-3xl mx-auto space-y-6 pb-20">
           {items.map((item, index) => {
             const isSelected = index === selectedIndex;
             return (
-              <div 
-                key={item.id} 
+              <article
+                key={item.id}
                 data-index={index}
                 onClick={() => onSelectItem(index)}
                 className={`
-                  bg-white rounded-xl border border-gray-200 shadow-sm
-                  ${isSelected ? 'ring-2 ring-reader-active ring-offset-2' : ''}
+                  bg-surface border-2 rounded-lg p-6 cursor-pointer transition-all
+                  ${isSelected ? 'border-accent shadow-brutal-sm' : 'border-border hover:border-ink'}
                 `}
               >
-                 <div className="p-6">
-                    <ExpandedCard item={item} sourceName={getSourceName(item.feedId)} onToggleStar={onToggleStar} />
-                 </div>
-              </div>
+                <ExpandedCard
+                  item={item}
+                  sourceName={getSourceName(item.feedId)}
+                  onToggleStar={onToggleStar}
+                  onTranscribe={(id) => handleTranscribe(id)}
+                  isTranscribing={transcribingId === item.id}
+                />
+              </article>
             );
           })}
         </div>
@@ -220,14 +264,13 @@ export const FeedList: React.FC<FeedListProps> = ({
     );
   }
 
-  // --- INBOX VIEW (Gmail List) ---
+  // --- INBOX VIEW (List) ---
   return (
-    <div className="flex-grow overflow-y-auto bg-reader-surface rounded-tl-2xl rounded-tr-2xl mx-0 sm:mx-2 mt-0 border border-gray-200/50 shadow-sm" ref={containerRef}>
+    <div className="flex-grow overflow-y-auto bg-surface" ref={containerRef}>
       {items.map((item, index) => {
         const isSelected = index === selectedIndex;
         const isRead = item.isRead;
         const sourceName = getSourceName(item.feedId);
-        // Detect content types
         const isVideo = item.mediaType === 'video' || (item.url && (item.url.includes('youtube.com') || item.url.includes('youtu.be')));
         const isPodcast = item.mediaType === 'audio' || !!item.audioUrl;
         const isTranscribed = item.transcriptionStatus === 'complete';
@@ -237,95 +280,94 @@ export const FeedList: React.FC<FeedListProps> = ({
             key={item.id}
             data-index={index}
             onClick={() => {
-               onSelectItem(index);
-               onOpenItem(item.id);
+              onSelectItem(index);
+              onOpenItem(item.id);
             }}
             className={`
-              flex items-center px-4 py-2.5 cursor-pointer border-b border-gray-100 hover:shadow-sm z-0 relative group
-              ${isSelected ? 'bg-reader-select/40' : 'hover:bg-gray-50'}
-              ${!isRead ? 'bg-white font-bold' : 'bg-white/50 font-normal'}
+              flex items-center px-4 py-3 cursor-pointer border-b border-border-muted relative group transition-colors
+              ${isSelected ? 'bg-accent-soft' : 'hover:bg-cream'}
+              ${!isRead ? 'bg-surface' : 'bg-surface-sunken'}
             `}
           >
-            {/* Drag Handle / Checkbox Area */}
-            <div className="w-10 flex-shrink-0 flex items-center justify-center text-gray-300">
-               <div className="w-4 h-4 border-2 border-gray-300 rounded-sm hover:border-gray-500"></div>
-            </div>
-
             {/* Star */}
-            <div className="w-8 flex-shrink-0 flex items-center justify-center mr-2" onClick={(e) => onToggleStar(e, item.id)}>
-               <Star
-                  size={18}
-                  className={`transition-all ${item.isStarred ? 'fill-reader-yellow text-reader-yellow' : 'text-gray-300 hover:text-gray-500'}`}
-               />
+            <div
+              className="w-8 flex-shrink-0 flex items-center justify-center mr-2"
+              onClick={(e) => onToggleStar(e, item.id)}
+            >
+              <Star
+                size={16}
+                strokeWidth={1.5}
+                className={`transition-all cursor-pointer ${item.isStarred ? 'fill-status-warning text-status-warning' : 'text-border hover:text-ink-muted'}`}
+              />
             </div>
 
-            {/* Title Column (Dominant, First) */}
-            <div className="flex-[5] min-w-0 flex items-center pr-4">
-               {isVideo && <Youtube size={16} className="mr-2 text-red-600 flex-shrink-0" />}
-               {isPodcast && (
-                 <div className="flex items-center mr-2 flex-shrink-0">
-                   {isTranscribed ? (
-                     <Check size={16} className="text-green-600" />
-                   ) : (
-                     <PenTool size={16} className="text-purple-600" />
-                   )}
-                 </div>
-               )}
-               <span className={`truncate text-[15px] ${!isRead ? 'text-black font-bold' : 'text-black font-normal'}`}>
-                  {item.title || '(No Title)'}
-               </span>
+            {/* Type Icon */}
+            <div className="w-6 flex-shrink-0 flex items-center justify-center mr-3">
+              {isVideo && <Youtube size={14} className="text-status-error" strokeWidth={1.5} />}
+              {isPodcast && (
+                isTranscribed
+                  ? <Check size={14} className="text-status-success" strokeWidth={2} />
+                  : <PenTool size={14} className="text-accent" strokeWidth={1.5} />
+              )}
             </div>
 
-            {/* Source Column (Secondary, Second) */}
-             <div className={`flex-[1.5] min-w-[120px] max-w-[180px] truncate text-[14px] ${!isRead ? 'text-gray-900 font-medium' : 'text-gray-500 font-normal'} mr-4`}>
-               {sourceName}
+            {/* Title */}
+            <div className="flex-1 min-w-0 mr-4">
+              <span className={`block truncate text-sm ${!isRead ? 'text-ink font-medium' : 'text-ink-soft'}`}>
+                {item.title || '(No Title)'}
+              </span>
             </div>
 
-            {/* Duration for podcasts, Snippet for articles */}
-            <div className="flex-[3] min-w-0 truncate text-gray-400 text-[14px] hidden xl:block mr-4">
-               {isPodcast && item.duration ? (
-                 <span className="flex items-center">
-                   <Clock size={12} className="mr-1" />
-                   {item.duration}
-                 </span>
-               ) : (
-                 item.snippet
-               )}
+            {/* Source */}
+            <div className={`w-32 flex-shrink-0 truncate text-xs mr-4 ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
+              {sourceName}
+            </div>
+
+            {/* Snippet (hidden on small screens) */}
+            <div className="flex-1 min-w-0 truncate text-ink-muted text-xs hidden xl:block mr-4">
+              {isPodcast && item.duration ? (
+                <span className="flex items-center">
+                  <Clock size={10} className="mr-1" strokeWidth={1.5} />
+                  {item.duration}
+                </span>
+              ) : (
+                item.snippet
+              )}
             </div>
 
             {/* Date */}
-            <div className={`w-[80px] flex-shrink-0 text-right text-[12px] ml-auto ${!isRead ? 'text-black font-bold' : 'text-gray-500'}`}>
-               {formatTime(item.timestamp)}
+            <div className={`w-16 flex-shrink-0 text-right text-xs tabular-nums ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
+              {formatTime(item.timestamp)}
             </div>
 
-            {/* Hover Actions (Gmail style) */}
-            <div className="absolute right-4 bg-white shadow-sm border border-gray-200 rounded-r-full px-2 py-1 hidden group-hover:flex items-center space-x-1">
-               {isPodcast && !isTranscribed && item.transcriptionStatus !== 'processing' && item.transcriptionStatus !== 'pending' && (
-                 <button
-                   className="p-1.5 hover:bg-purple-100 rounded-full text-purple-600"
-                   title="Transcribe"
-                   onClick={(e) => {
-                     e.stopPropagation();
-                     handleTranscribe(item.id);
-                   }}
-                   disabled={transcribingId === item.id}
-                 >
-                   {transcribingId === item.id ? (
-                     <Loader2 size={16} className="animate-spin" />
-                   ) : (
-                     <Mic size={16} />
-                   )}
-                 </button>
-               )}
-               {(item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending') && (
-                 <span className="text-xs text-purple-600 px-2 flex items-center">
-                   <Loader2 size={12} className="animate-spin mr-1" />
-                   {transcribingId === item.id ? transcribeProgress : 'Processing...'}
-                 </span>
-               )}
-               <button className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500" title="Archive"><CheckCircle2 size={16} /></button>
-               <button className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500" title="Delete"><Mail size={16} /></button>
-               <button className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500" title="Mark as unread"><Mail size={16} /></button>
+            {/* Hover Actions */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-surface border border-border rounded-md px-1 py-0.5 hidden group-hover:flex items-center gap-0.5 shadow-soft">
+              {isPodcast && !isTranscribed && item.transcriptionStatus !== 'processing' && item.transcriptionStatus !== 'pending' && (
+                <button
+                  className="p-1.5 hover:bg-accent-soft rounded text-accent"
+                  title="Transcribe"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleTranscribe(item.id);
+                  }}
+                  disabled={transcribingId === item.id}
+                >
+                  {transcribingId === item.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Mic size={14} strokeWidth={1.5} />
+                  )}
+                </button>
+              )}
+              {(item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending') && (
+                <span className="text-xs text-accent px-2 flex items-center">
+                  <Loader2 size={12} className="animate-spin mr-1" />
+                  {transcribingId === item.id ? transcribeProgress : 'Processing...'}
+                </span>
+              )}
+              <button className="p-1.5 hover:bg-cream-dark rounded text-ink-muted" title="Archive">
+                <CheckCircle2 size={14} strokeWidth={1.5} />
+              </button>
             </div>
           </div>
         );
@@ -333,33 +375,40 @@ export const FeedList: React.FC<FeedListProps> = ({
 
       {/* API Key Modal */}
       {showApiKeyModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
-            <div className="flex items-center mb-4">
-              <Key size={24} className="text-purple-600 mr-3" />
-              <h2 className="text-lg font-bold">AssemblyAI API Key Required</h2>
+        <div className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center backdrop-blur-sm p-4">
+          <div className="bg-surface border-2 border-ink rounded-lg shadow-brutal w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <Key size={20} className="text-accent" strokeWidth={1.5} />
+                <h2 className="font-serif text-lg font-semibold text-ink">API Key Required</h2>
+              </div>
             </div>
-            <p className="text-gray-600 text-sm mb-4">
-              To transcribe podcasts, you need an AssemblyAI API key.
-              Get one free at <a href="https://www.assemblyai.com" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">assemblyai.com</a>
-            </p>
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="Enter your API key"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <div className="flex justify-end space-x-3">
+            <div className="p-5">
+              <p className="text-ink-muted text-sm mb-4">
+                To transcribe podcasts, you need an AssemblyAI API key.
+                Get one free at{' '}
+                <a href="https://www.assemblyai.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:text-accent-muted underline">
+                  assemblyai.com
+                </a>
+              </p>
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Enter your API key"
+                className="w-full px-4 py-3 border-2 border-border rounded-md text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div className="px-5 py-4 bg-cream-warm border-t border-border flex justify-end gap-3">
               <button
                 onClick={() => setShowApiKeyModal(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="px-4 py-2 text-ink font-medium text-sm rounded-md border-2 border-border hover:border-ink transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveApiKey}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                className="px-5 py-2 bg-accent text-white font-medium text-sm rounded-md border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
               >
                 Save Key
               </button>
@@ -371,17 +420,134 @@ export const FeedList: React.FC<FeedListProps> = ({
   );
 };
 
+// Collapsible section component for toggleable content
+interface CollapsibleSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  badge?: string;
+}
+
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, icon, defaultOpen = false, children, badge }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden mb-4">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-cream-warm hover:bg-cream-dark transition-colors font-sans"
+      >
+        <div className="flex items-center gap-2 text-sm font-medium text-ink">
+          {icon}
+          <span>{title}</span>
+          {badge && (
+            <span className="text-xs bg-accent-soft text-accent px-2 py-0.5 rounded-full">{badge}</span>
+          )}
+        </div>
+        {isOpen ? <ChevronUp size={16} className="text-ink-muted" /> : <ChevronDown size={16} className="text-ink-muted" />}
+      </button>
+      {isOpen && (
+        <div className="p-4 bg-surface border-t border-border">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Transformed output card for the outputs panel
+interface TransformOutputCardProps {
+  title: string;
+  content: string;
+  onDownload: () => void;
+  onCopy: () => void;
+  onClear: () => void;
+}
+
+const TransformOutputCard: React.FC<TransformOutputCardProps> = ({ title, content, onDownload, onCopy, onClear }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="bg-surface border-2 border-accent rounded-lg overflow-hidden">
+      {/* Card Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-accent-soft border-b border-accent">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 text-accent font-semibold text-sm font-sans"
+        >
+          <Sparkles size={16} strokeWidth={1.5} />
+          <span>{title}</span>
+          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleCopy}
+            className="p-1.5 hover:bg-accent/10 rounded text-accent transition-colors"
+            title="Copy to clipboard"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          <button
+            onClick={onDownload}
+            className="p-1.5 hover:bg-accent/10 rounded text-accent transition-colors"
+            title="Download as markdown"
+          >
+            <Download size={14} />
+          </button>
+          <button
+            onClick={onClear}
+            className="p-1.5 hover:bg-status-error/10 rounded text-ink-muted hover:text-status-error transition-colors"
+            title="Clear"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Card Content - Rendered Markdown */}
+      {isExpanded && (
+        <div className="p-5 max-h-[600px] overflow-y-auto">
+          <div className="prose-polished">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Sub-component for the expanded article body
-const ExpandedCard = ({ item, sourceName, onToggleStar }: { item: FeedItem, sourceName: string, onToggleStar: any }) => {
-  const [summary, setSummary] = useState<string | null>(item.aiSummary || null);
+interface ExpandedCardProps {
+  item: FeedItem;
+  sourceName: string;
+  onToggleStar: any;
+  onTranscribe?: (itemId: string) => void;
+  isTranscribing?: boolean;
+}
+
+const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing }: ExpandedCardProps) => {
+  // Transform outputs - can have multiple
+  const [transformOutputs, setTransformOutputs] = useState<Array<{ id: string; title: string; content: string }>>([]);
   const [rawTranscript, setRawTranscript] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
-  const [customPrompt, setCustomPrompt] = useState('');
-  // Robust fallback for video detection
+
+  // Toggle states
+  const [showTranscript, setShowTranscript] = useState(true); // Default open for videos
+  const [showDescription, setShowDescription] = useState(false);
+
   const isVideo = item.mediaType === 'video' || (item.url && (item.url.includes('youtube.com') || item.url.includes('youtu.be')));
+  const isPodcast = item.mediaType === 'audio' || !!item.audioUrl;
+  const isScannedDoc = item.feedId === 'scanned-documents';
+  const hasTranscript = item.transcriptionStatus === 'complete' && item.content;
 
   const getVideoId = (url: string) => {
     if (!url) return null;
@@ -390,14 +556,12 @@ const ExpandedCard = ({ item, sourceName, onToggleStar }: { item: FeedItem, sour
     return (match && match[7].length === 11) ? match[7] : null;
   };
 
-  // Step 1: Fetch raw transcript from YouTube
   const handleFetchTranscript = async () => {
     const videoId = getVideoId(item.url);
     if (!videoId) {
-      setFetchError('Could not extract video ID from URL');
+      setFetchError('Could not extract video ID');
       return;
     }
-    
     setIsFetching(true);
     setFetchError(null);
     try {
@@ -405,7 +569,7 @@ const ExpandedCard = ({ item, sourceName, onToggleStar }: { item: FeedItem, sour
       if (transcript) {
         setRawTranscript(transcript);
       } else {
-        setFetchError('No captions available for this video');
+        setFetchError('No captions available');
       }
     } catch (error: any) {
       setFetchError(error.message || 'Failed to fetch transcript');
@@ -414,108 +578,74 @@ const ExpandedCard = ({ item, sourceName, onToggleStar }: { item: FeedItem, sour
     }
   };
 
-  // Step 2: Polish the transcript with Gemini
-  const handlePolishTranscript = async () => {
-    if (!rawTranscript) return;
-    
-    setIsGenerating(true);
-    try {
-      const result = await polishTranscript(rawTranscript, undefined, item.title);
-      setSummary(result);
-      await storage.updateSummary(item.id, result);
-    } catch (error: any) {
-      alert(`Failed to polish transcript: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleSaveMarkdown = (content: string, filename: string) => {
+    const markdown = `# ${item.title}\n\n**Source:** ${sourceName}\n**URL:** ${item.url}\n**Date:** ${new Date(item.timestamp).toLocaleString()}\n\n---\n\n${content}`;
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
-  // Transform presets
-  const TRANSFORM_PROMPTS: Record<string, string> = {
-    summarize: `Summarize this transcript in 5-7 bullet points. Focus on the key insights and actionable takeaways.
-
-Transcript:
-`,
-    key_points: `Extract the 10 most important points from this transcript. Format as a numbered list with brief explanations.
-
-Transcript:
-`,
-    quotes: `Extract the most quotable and insightful statements from this transcript. Format each quote with context about who said it and why it matters.
-
-Transcript:
-`,
+  const handleCopyToClipboard = (content: string) => {
+    navigator.clipboard.writeText(content);
   };
 
-  const handleTransform = async (transformType: string) => {
-    if (!rawTranscript) return;
-    
-    setIsGenerating(true);
-    try {
-      let prompt: string;
-      if (transformType === 'custom') {
-        prompt = `${customPrompt}\n\nTranscript:\n${rawTranscript}`;
-      } else {
-        prompt = TRANSFORM_PROMPTS[transformType] + rawTranscript;
-      }
-      
-      const result = await generateArticleSummary(prompt);
-      setSummary(result);
-      await storage.updateSummary(item.id, result);
-    } catch (error: any) {
-      alert(`Transform failed: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleTransformResult = async (result: { output: string }, transform?: any) => {
+    const newOutput = {
+      id: Date.now().toString(),
+      title: transform?.name || 'Polished',
+      content: result.output,
+    };
+    setTransformOutputs(prev => [...prev, newOutput]);
+    await storage.updateSummary(item.id, result.output);
   };
 
-  // For non-video content: summarize
-  const handleSummarize = async () => {
-    setIsGenerating(true);
-    try {
-      const textToAnalyze = (item.content || "") + "\n" + (item.snippet || "");
-      const prompt = `Summarize this article into exactly 3 concise bullet points. Style: Objective, journalistic, and dense.\n\nArticle Title: ${item.title}\n\nArticle Content:\n${textToAnalyze}`;
-      const result = await generateArticleSummary(prompt);
-      setSummary(result);
-      await storage.updateSummary(item.id, result);
-    } catch (error) {
-      alert("Failed to generate summary.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleSaveMarkdown = () => {
-      const markdown = `# ${item.title}\n\n**Source:** ${sourceName}\n**URL:** ${item.url}\n**Date:** ${new Date(item.timestamp).toLocaleString()}\n\n---\n\n${item.content || item.snippet}`;
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+  const handleRemoveOutput = (id: string) => {
+    setTransformOutputs(prev => prev.filter(o => o.id !== id));
   };
 
   const videoId = isVideo ? getVideoId(item.url) : null;
-  // Use current origin for iframe permissions
   const origin = window.location.origin;
 
+  // Determine content type for TransformPanel
+  const getContentType = () => {
+    if (isVideo || isPodcast) return 'transcript';
+    return 'article';
+  };
+
+  const getContentToTransform = () => {
+    if (isVideo) return rawTranscript;
+    if (isPodcast && hasTranscript) return item.content;
+    if (!isVideo && !isPodcast) return (item.content || '') + '\n' + (item.snippet || '');
+    return null;
+  };
+
+  const contentType = getContentType();
+  const contentToTransform = getContentToTransform();
+  const hasDescription = item.snippet && item.snippet.length > 20;
+
   return (
-    <div className="font-sans text-reader-text">
-      
-      <div className="flex items-center mb-6 space-x-3">
-         <a href={item.url} target="_blank" rel="noreferrer" className="text-reader-active font-medium hover:underline text-sm flex items-center">
-            <ExternalLink size={14} className="mr-1" /> Open in new tab
-         </a>
-         <button onClick={handleSaveMarkdown} className="text-gray-500 hover:text-black font-medium text-sm flex items-center">
-            <Download size={14} className="mr-1" /> Save as Markdown
-         </button>
+    <div className="font-serif text-ink">
+
+      {/* Actions Bar */}
+      <div className="mb-6">
+        <button
+          onClick={() => handleSaveMarkdown(item.content || item.snippet || '', `${item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`)}
+          className="text-ink-muted hover:text-ink text-sm flex items-center gap-1.5 transition-colors font-sans"
+        >
+          <Download size={14} strokeWidth={1.5} /> Export .md
+        </button>
       </div>
 
+      {/* YouTube Embed */}
       {videoId && (
-        <div className="mb-8 relative pb-[56.25%] h-0 rounded-2xl overflow-hidden shadow-sm bg-black">
-          <iframe 
+        <div className="mb-6 relative pb-[56.25%] h-0 rounded-lg overflow-hidden bg-ink">
+          <iframe
             src={`https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&origin=${origin}`}
             className="absolute top-0 left-0 w-full h-full"
             frameBorder="0"
@@ -527,162 +657,177 @@ Transcript:
         </div>
       )}
 
-      {/* YouTube Transcript Workflow */}
-      {isVideo && (
-        <div className="mb-6 space-y-4">
-          {/* Step 1: Fetch Transcript */}
-          {!rawTranscript && !summary && (
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={handleFetchTranscript}
-                disabled={isFetching}
-                className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded-full transition-all shadow-sm"
-              >
-                {isFetching ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <Download size={16} className="text-blue-500" />}
-                <span>{isFetching ? 'Fetching...' : '1. Fetch Transcript'}</span>
-              </button>
-              {fetchError && <span className="text-red-500 text-sm">{fetchError}</span>}
+      {/* Podcast Audio Player */}
+      {isPodcast && item.audioUrl && (
+        <div className="mb-6 bg-cream-warm border-2 border-border rounded-lg p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-accent rounded-md flex items-center justify-center flex-shrink-0">
+              <Mic size={18} className="text-white" strokeWidth={1.5} />
             </div>
-          )}
-
-          {/* Step 2: Transform Options (shown after transcript fetched) */}
-          {rawTranscript && !summary && (
-            <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-green-600 flex items-center">
-                  <Check size={16} className="mr-1" /> Transcript fetched ({rawTranscript.length.toLocaleString()} chars)
-                </span>
-              </div>
-              
-              <p className="text-xs text-gray-500 mb-3">Choose a transform:</p>
-              
-              <div className="flex flex-wrap gap-2 mb-3">
-                <button 
-                  onClick={handlePolishTranscript}
-                  disabled={isGenerating}
-                  className="flex items-center space-x-1 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-full transition-all"
-                >
-                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <PenTool size={14} />}
-                  <span>Polish</span>
-                </button>
-                <button 
-                  onClick={() => handleTransform('summarize')}
-                  disabled={isGenerating}
-                  className="flex items-center space-x-1 text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 px-3 py-1.5 rounded-full transition-all"
-                >
-                  <Sparkles size={14} />
-                  <span>Summarize</span>
-                </button>
-                <button 
-                  onClick={() => handleTransform('key_points')}
-                  disabled={isGenerating}
-                  className="flex items-center space-x-1 text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 px-3 py-1.5 rounded-full transition-all"
-                >
-                  <FileText size={14} />
-                  <span>Key Points</span>
-                </button>
-                <button 
-                  onClick={() => handleTransform('quotes')}
-                  disabled={isGenerating}
-                  className="flex items-center space-x-1 text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 px-3 py-1.5 rounded-full transition-all"
-                >
-                  <span>"</span>
-                  <span>Extract Quotes</span>
-                </button>
-                <button 
-                  onClick={() => setShowCustomPrompt(!showCustomPrompt)}
-                  className="flex items-center space-x-1 text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 px-3 py-1.5 rounded-full transition-all"
-                >
-                  <span>💬</span>
-                  <span>Custom</span>
-                </button>
-              </div>
-
-              {showCustomPrompt && (
-                <div className="mt-3">
-                  <textarea
-                    value={customPrompt}
-                    onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Enter your custom prompt... e.g. 'Analyze this from a marketing perspective' or 'What are the actionable takeaways?'"
-                    className="w-full p-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                    rows={3}
-                  />
-                  <button 
-                    onClick={() => handleTransform('custom')}
-                    disabled={isGenerating || !customPrompt.trim()}
-                    className="mt-2 flex items-center space-x-1 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 px-4 py-2 rounded-full transition-all"
-                  >
-                    {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    <span>Run Custom Transform</span>
-                  </button>
-                </div>
+            <div>
+              <p className="text-sm font-medium text-ink font-sans">Podcast Episode</p>
+              {item.duration && (
+                <p className="text-xs text-ink-muted font-sans flex items-center gap-1">
+                  <Clock size={10} strokeWidth={1.5} />
+                  {item.duration}
+                </p>
               )}
             </div>
-          )}
+          </div>
+          <audio controls className="w-full h-10" preload="metadata">
+            <source src={item.audioUrl} type="audio/mpeg" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
 
-          {/* Output */}
-          {summary && (
-            <div className="bg-[#F2F6FC] rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center text-reader-active font-bold text-sm">
-                  <FileText size={16} className="mr-2" /> 
-                  Transformed Output
-                </div>
-                <button 
-                  onClick={() => { setSummary(null); }}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  ← Back to transforms
-                </button>
-              </div>
-              <div className="text-gray-800 text-[15px] leading-relaxed whitespace-pre-line">
-                {summary}
-              </div>
+      {/* Podcast Transcription Status/Action */}
+      {isPodcast && !hasTranscript && (
+        <div className="mb-6 bg-surface border-2 border-ink rounded-lg p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-ink font-sans mb-1">
+                {isTranscribing || item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending'
+                  ? 'Transcribing...'
+                  : 'Transcription Required'}
+              </p>
+              <p className="text-xs text-ink-muted font-sans">
+                {isTranscribing || item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending'
+                  ? 'This may take a few minutes depending on episode length.'
+                  : 'Transcribe this episode to unlock Polish, Summarize, and Key Points.'}
+              </p>
             </div>
+            {isTranscribing || item.transcriptionStatus === 'processing' || item.transcriptionStatus === 'pending' ? (
+              <div className="flex items-center gap-2 text-accent font-sans flex-shrink-0">
+                <Loader2 size={20} className="animate-spin" />
+              </div>
+            ) : (
+              <button
+                onClick={() => onTranscribe?.(item.id)}
+                disabled={!onTranscribe}
+                className="flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-muted border-2 border-ink px-4 py-2.5 rounded-md shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all font-sans flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Mic size={16} strokeWidth={1.5} />
+                <span>Transcribe</span>
+              </button>
+            )}
+          </div>
+          {item.transcriptionStatus === 'error' && (
+            <p className="text-xs text-status-error mt-3 font-sans">Transcription failed. Try again.</p>
           )}
         </div>
       )}
 
-      {/* Non-video: Simple summarize button */}
-      {!isVideo && (
-        <>
-          {summary ? (
-            <div className="mb-8 relative overflow-hidden rounded-2xl bg-[#F2F6FC] p-5 border-none">
-              <div className="flex items-center text-reader-active font-bold text-sm mb-3">
-                <Sparkles size={16} className="mr-2" /> AI Summary
-              </div>
-              <div className="text-gray-800 text-[15px] leading-relaxed font-medium whitespace-pre-line">
-                {summary}
-              </div>
+      {/* YouTube: Fetch Transcript */}
+      {isVideo && !rawTranscript && (
+        <div className="mb-6 bg-surface border-2 border-ink rounded-lg p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-ink font-sans mb-1">
+                {isFetching ? 'Fetching Transcript...' : 'Transcript Available'}
+              </p>
+              <p className="text-xs text-ink-muted font-sans">
+                {isFetching ? 'Retrieving captions from YouTube.' : 'Fetch the transcript to unlock Polish, Summarize, and Key Points.'}
+              </p>
+              {fetchError && <p className="text-xs text-status-error mt-2 font-sans">{fetchError}</p>}
             </div>
-          ) : (
-            <div className="mb-6">
-              <button 
-                onClick={handleSummarize}
-                disabled={isGenerating}
-                className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded-full transition-all shadow-sm group"
+            {isFetching ? (
+              <Loader2 size={20} className="animate-spin text-accent" />
+            ) : (
+              <button
+                onClick={handleFetchTranscript}
+                className="flex items-center gap-2 text-sm font-medium text-white bg-accent hover:bg-accent-muted border-2 border-ink px-4 py-2.5 rounded-md shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all font-sans flex-shrink-0"
               >
-                {isGenerating ? <Loader2 size={16} className="animate-spin text-reader-active" /> : <Sparkles size={16} className="text-reader-active" />}
-                <span className="group-hover:text-reader-active transition-colors">
-                   {isGenerating ? 'Processing...' : 'Summarize with AI'}
-                </span>
+                <Youtube size={16} strokeWidth={1.5} />
+                <span>Fetch Transcript</span>
               </button>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* Content Renderer */}
-      <div 
-        className="prose prose-lg max-w-none text-[#1F1F1F] text-[16px] leading-relaxed font-sans
-        [&>p]:mb-5 [&>p]:leading-7 
-        [&>h3]:text-xl [&>h3]:font-medium [&>h3]:mt-6 [&>h3]:mb-3 [&>h3]:text-black
-        [&>img]:max-w-full [&>img]:rounded-xl [&>img]:my-6 
-        [&>blockquote]:border-l-2 [&>blockquote]:border-reader-active [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:text-gray-600
-        [&>pre]:bg-[#F6F8FC] [&>pre]:p-4 [&>pre]:rounded-lg [&>pre]:text-sm
-        [&>ul]:list-disc [&>ul]:pl-5 [&>li]:mb-2"
-        dangerouslySetInnerHTML={{ __html: item.content || item.snippet }} 
-      />
+      {/* === MAIN CONTENT AREA === */}
+      <div className="space-y-4">
+
+        {/* Description Toggle (for videos/podcasts) */}
+        {(isVideo || isPodcast) && hasDescription && (
+          <CollapsibleSection
+            title="Description"
+            icon={<FileText size={14} strokeWidth={1.5} />}
+            defaultOpen={showDescription}
+          >
+            <p className="text-sm text-ink-soft leading-relaxed font-sans">{item.snippet}</p>
+          </CollapsibleSection>
+        )}
+
+        {/* Raw Transcript Toggle (for videos with fetched transcript or podcasts with transcription) */}
+        {((isVideo && rawTranscript) || (isPodcast && hasTranscript)) && (
+          <CollapsibleSection
+            title="Raw Transcript"
+            icon={<PenTool size={14} strokeWidth={1.5} />}
+            defaultOpen={showTranscript}
+            badge={`${((isVideo ? rawTranscript : item.content) || '').length.toLocaleString()} chars`}
+          >
+            <pre className="text-sm text-ink-muted whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
+              {isVideo ? rawTranscript : item.content}
+            </pre>
+          </CollapsibleSection>
+        )}
+
+        {/* Transform Panel - Just buttons when we have content */}
+        {contentToTransform && (
+          <div className="bg-cream-warm border-2 border-ink rounded-lg p-4">
+            <p className="text-xs text-ink-muted uppercase tracking-wide font-semibold mb-3 font-sans flex items-center gap-2">
+              <Sparkles size={12} strokeWidth={2} />
+              Transform
+            </p>
+            <TransformPanel
+              content={contentToTransform}
+              contentType={contentType}
+              title={item.title}
+              onResult={handleTransformResult}
+              compact={true}
+            />
+          </div>
+        )}
+
+        {/* === TRANSFORMED OUTPUTS PANEL === */}
+        {transformOutputs.length > 0 && (
+          <div className="mt-6 pt-6 border-t-2 border-accent">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-accent mb-4 font-sans flex items-center gap-2">
+              <Sparkles size={14} strokeWidth={2} />
+              Transformed Outputs
+              <span className="text-xs bg-accent text-white px-2 py-0.5 rounded-full">{transformOutputs.length}</span>
+            </h3>
+            <div className="space-y-4">
+              {transformOutputs.map((output) => (
+                <TransformOutputCard
+                  key={output.id}
+                  title={output.title}
+                  content={output.content}
+                  onDownload={() => handleSaveMarkdown(output.content, `${item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${output.title.toLowerCase()}.md`)}
+                  onCopy={() => handleCopyToClipboard(output.content)}
+                  onClear={() => handleRemoveOutput(output.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Regular Article Content (non-video, non-podcast) */}
+        {!isVideo && !isPodcast && (
+          isScannedDoc ? (
+            <div className="prose-content mt-6">
+              <ReactMarkdown>{item.content || item.snippet}</ReactMarkdown>
+            </div>
+          ) : (
+            <div
+              className="prose-content mt-6"
+              dangerouslySetInnerHTML={{ __html: item.content || item.snippet }}
+            />
+          )
+        )}
+      </div>
     </div>
   );
 }

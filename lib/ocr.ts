@@ -3,14 +3,13 @@
  *
  * Uses Gemini 3 for PDF-to-Markdown conversion.
  * Handles chunking for large PDFs to stay within API limits.
- * Enhanced with Tesseract pre-analysis for cost estimation and smart processing.
+ * Uses heuristic-based analysis for cost estimation.
  */
 
 import { PDFDocument } from 'pdf-lib';
-import Tesseract from 'tesseract.js';
 
-// Gemini 3 Pro - best for multimodal tasks including PDF OCR
-const GEMINI_MODEL = 'gemini-3-pro-preview';
+// Gemini 3 Flash - fast and reliable for PDF OCR
+const GEMINI_MODEL = 'gemini-3-flash-preview';
 
 // Gemini API limits
 const MAX_REQUEST_SIZE_MB = 20;
@@ -73,10 +72,13 @@ export interface DocumentAnalysis {
   estimatedTokens: number;
   contentType: 'text' | 'mixed' | 'image-heavy';
   quality: 'high' | 'medium' | 'low';
+  language: 'english' | 'latin' | 'mixed' | 'other';
+  isScholarly: boolean;
   structure: {
     hasTables: boolean;
     hasImages: boolean;
     hasColumns: boolean;
+    hasFootnotes: boolean;
     headings: string[];
   };
   costEstimate: {
@@ -382,142 +384,117 @@ export function titleFromFilename(filename: string): string {
 }
 
 /**
- * Analyze PDF document using Tesseract for cost estimation and processing strategy
+ * Analyze PDF document using heuristics for cost estimation
+ * Actual content detection (Latin, columns, etc.) is done by Gemini during processing
  */
 export async function analyzeDocument(
   file: File,
   onProgress?: ProgressCallback
 ): Promise<DocumentAnalysis> {
-  const startTime = Date.now();
-  
-  onProgress?.({ 
-    status: 'analyzing', 
-    message: 'Analyzing document structure...' 
+  onProgress?.({
+    status: 'analyzing',
+    message: 'Analyzing document...'
   });
 
   try {
-    // Load PDF to get page count and extract a sample page
+    // Load PDF to get page count
     const arrayBuffer = await file.arrayBuffer();
     const pdfBytes = new Uint8Array(arrayBuffer);
     const pdfDoc = await PDFDocument.load(pdfBytes);
     const pageCount = pdfDoc.getPageCount();
     const fileSizeMB = pdfBytes.length / (1024 * 1024);
 
-    // Extract first page for Tesseract analysis
-    const samplePdfBytes = await extractPageRange(pdfBytes, 0, Math.min(0, pageCount - 1));
-    const sampleBase64 = uint8ArrayToBase64(samplePdfBytes);
-
-    // Use Tesseract to analyze the first page
-    const { data: tesseractResult } = await Tesseract.recognize(
-      sampleBase64.replace(/^data:application\/pdf;base64,/, ''),
-      'eng',
-      {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            onProgress?.({
-              status: 'analyzing',
-              message: `Analyzing text content... ${Math.round(m.progress * 100)}%`
-            });
-          }
-        }
-      }
-    );
-
-    // Analyze the OCR results
-    const text = tesseractResult.text;
-    const words = text.split(/\s+/).filter(w => w.length > 0);
-    const wordCount = words.length;
-    
-    // Estimate tokens (rough approximation: 1 token ≈ 4 characters for English)
-    const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length || 4;
-    const estimatedTokensPerPage = Math.ceil((wordCount * avgWordLength) / 4);
+    // Estimate tokens based on file size and page count
+    // Typical PDF: ~500 words/page, ~1.3 tokens/word = ~650 tokens/page
+    const estimatedTokensPerPage = 650;
     const totalEstimatedTokens = estimatedTokensPerPage * pageCount;
 
-    // Determine content quality from Tesseract confidence
-    const avgConfidence = tesseractResult.confidence;
-    const quality: DocumentAnalysis['quality'] = 
-      avgConfidence > 80 ? 'high' : avgConfidence > 60 ? 'medium' : 'low';
+    // Detect language hints from filename
+    const filename = file.name.toLowerCase();
+    const latinHints = ['latin', 'medieval', 'aquinas', 'augustine', 'caput', 'liber'];
+    const isLikelyLatin = latinHints.some(hint => filename.includes(hint));
 
-    // Detect content type and structure
-    const hasTables = /\+[-+]+\+|\|.*\|/.test(text);
-    const hasImages = tesseractResult.blocks?.some(block => 
-      block.paragraphs.some(p => p.lines.some(l => l.words.some(w => w.confidence < 50)))
-    ) || false;
-    const hasColumns = text.split('\n').filter(line => line.trim()).length > wordCount / 10;
+    // Detect scholarly hints from filename
+    const scholarlyHints = ['thesis', 'dissertation', 'journal', 'academic', 'paper'];
+    const isLikelyScholarly = scholarlyHints.some(hint => filename.includes(hint));
 
-    // Extract potential headings (lines that look like titles)
-    const lines = text.split('\n').filter(line => line.trim().length > 0);
-    const headings = lines
-      .filter(line => 
-        line.length < 100 && 
-        /^[A-Z]/.test(line.trim()) && 
-        !line.includes('.') && 
-        line.split(' ').length <= 8
-      )
-      .slice(0, 10);
+    // Use default quality assumption (will be refined by Gemini during processing)
+    const quality: DocumentAnalysis['quality'] = 'medium';
+    const contentType: DocumentAnalysis['contentType'] = 'text';
 
-    const contentType: DocumentAnalysis['contentType'] = 
-      hasImages ? 'image-heavy' : hasTables ? 'mixed' : 'text';
-
-    // Calculate recommended chunk size based on analysis
-    let recommendedChunkSize = PAGES_PER_CHUNK;
-    if (contentType === 'image-heavy') {
-      recommendedChunkSize = Math.floor(PAGES_PER_CHUNK * 0.7); // Smaller chunks for image-heavy
-    } else if (contentType === 'text' && quality === 'high') {
-      recommendedChunkSize = Math.floor(PAGES_PER_CHUNK * 1.3); // Larger chunks for clean text
-    }
-
-    // Calculate cost estimate (Gemini Pro pricing: $0.0025 per 1K tokens for input)
-    const costPerToken = 0.0025 / 1000;
+    // Calculate cost estimate (Gemini Flash pricing)
+    const costPerToken = 0.0001 / 1000; // Gemini Flash is very cheap
     const estimatedCost = totalEstimatedTokens * costPerToken;
 
-    // Estimate processing time (rough estimate based on complexity)
+    // Estimate processing time
     const baseTimePerPage = 2; // seconds
-    const complexityMultiplier = quality === 'high' ? 1 : quality === 'medium' ? 1.5 : 2;
-    const estimatedProcessingTime = pageCount * baseTimePerPage * complexityMultiplier;
-
-    const analysisTimeMs = Date.now() - startTime;
+    const estimatedProcessingTime = pageCount * baseTimePerPage;
 
     const analysis: DocumentAnalysis = {
       pageCount,
       estimatedTokens: totalEstimatedTokens,
       contentType,
       quality,
+      language: isLikelyLatin ? 'latin' : 'english',
+      isScholarly: isLikelyScholarly,
       structure: {
-        hasTables,
-        hasImages,
-        hasColumns,
-        headings
+        hasTables: false,     // Will be detected by Gemini
+        hasImages: false,     // Will be detected by Gemini
+        hasColumns: false,    // Will be detected by Gemini
+        hasFootnotes: false,  // Will be detected by Gemini
+        headings: []
       },
       costEstimate: {
         tokens: totalEstimatedTokens,
         cost: estimatedCost,
-        chunks: Math.ceil(pageCount / recommendedChunkSize),
+        chunks: Math.ceil(pageCount / PAGES_PER_CHUNK),
         processingTime: estimatedProcessingTime
       },
-      recommendedChunkSize
+      recommendedChunkSize: PAGES_PER_CHUNK
     };
 
     console.log(
-      `[Analysis] Completed for ${file.name}: ${pageCount} pages, ` +
-      `${totalEstimatedTokens.toLocaleString()} tokens, ` +
-      `estimated $${estimatedCost.toFixed(4)}`
+      `[Analysis] ${file.name}: ${pageCount} pages, ${fileSizeMB.toFixed(1)} MB, ` +
+      `~${totalEstimatedTokens.toLocaleString()} tokens`
     );
 
-    onProgress?.({ 
-      status: 'analyzing', 
-      message: 'Analysis complete!' 
+    onProgress?.({
+      status: 'analyzing',
+      message: 'Analysis complete!'
     });
 
     return analysis;
   } catch (error: any) {
     console.error('[Analysis] Error:', error);
-    throw new Error(`Document analysis failed: ${error.message}`);
+    // Return basic analysis even on error
+    return {
+      pageCount: 1,
+      estimatedTokens: 1000,
+      contentType: 'text',
+      quality: 'medium',
+      language: 'english',
+      isScholarly: false,
+      structure: {
+        hasTables: false,
+        hasImages: false,
+        hasColumns: false,
+        hasFootnotes: false,
+        headings: []
+      },
+      costEstimate: {
+        tokens: 1000,
+        cost: 0.0001,
+        chunks: 1,
+        processingTime: 5
+      },
+      recommendedChunkSize: PAGES_PER_CHUNK
+    };
   }
 }
 
 /**
  * Create optimized prompt based on document analysis
+ * The prompt is designed to let Gemini auto-detect document features
  */
 export function createOptimizedPrompt(analysis: DocumentAnalysis, isChunk: boolean = false, chunkNum?: number, totalChunks?: number): string {
   let prompt = '';
@@ -525,46 +502,34 @@ export function createOptimizedPrompt(analysis: DocumentAnalysis, isChunk: boole
   if (isChunk && chunkNum && totalChunks) {
     prompt = `Convert this PDF section to clean Markdown.
 
-This is part ${chunkNum} of ${totalChunks} from a larger document.\n`;
+This is part ${chunkNum} of ${totalChunks} from a larger document.
+${chunkNum > 1 ? 'Continue from where the previous section ended.\n' : ''}`;
   } else {
     prompt = `Convert this PDF document to clean Markdown.\n`;
   }
 
-  // Add specific instructions based on analysis
-  if (analysis.quality === 'low') {
-    prompt += `Note: This document has poor OCR quality. Focus on preserving readable text while fixing obvious OCR errors.\n`;
+  // Add hints based on filename analysis if detected
+  if (analysis.language === 'latin') {
+    prompt += `\nThis appears to be a Latin/medieval document. Please:
+- Restore classical Latin diacriticals (æ, œ) where appropriate
+- Use ## for chapter headings (CAP., CAPUT, etc.)\n`;
   }
 
-  if (analysis.structure.hasTables) {
-    prompt += `This document contains tables. Convert them to proper Markdown table format with | separators.\n`;
-  }
-
-  if (analysis.structure.hasImages) {
-    prompt += `This document contains images. Briefly describe each image in [Image: description] format.\n`;
-  }
-
-  if (analysis.structure.hasColumns) {
-    prompt += `This document appears to have multiple columns. Preserve the logical flow of content.\n`;
-  }
-
-  if (analysis.structure.headings.length > 0) {
-    const sampleHeadings = analysis.structure.headings.slice(0, 3).join(', ');
-    prompt += `Preserve document structure with headings like: ${sampleHeadings}.\n`;
-  }
-
-  prompt += `\nGeneral Instructions:
-- Preserve ALL text exactly as it appears (fixing obvious OCR errors if quality is poor)
-- Use proper heading levels (# for title, ## for sections, etc.)
-- Format footnotes using [^1] notation
-- Preserve paragraph structure
-- Convert tables to Markdown tables if present
-- Preserve emphasis (bold, italic) where visible
+  prompt += `
+## Instructions:
+- Preserve ALL text exactly as it appears
+- Auto-detect and handle: tables, multi-column layouts, footnotes, images
+- For multi-column text: read left column first (top-to-bottom), then right column
+- Convert tables to Markdown format with | separators
+- Format footnotes using [^1] notation with definitions at the end
+- Use proper heading levels (# for title, ## for sections, ### for subsections)
+- Preserve paragraph structure and document flow
+- For images: describe briefly as [Image: description]
+- Do NOT include page numbers or recurring headers/footers
 - Do NOT wrap output in code blocks
-- Do NOT add commentary, just the converted text`;
+- Do NOT add commentary, just the converted text
 
-  if (isChunk && chunkNum && totalChunks && chunkNum > 1) {
-    prompt += `\n- Continue from where the previous section ended`;
-  }
+Output clean, readable Markdown.`;
 
   return prompt;
 }

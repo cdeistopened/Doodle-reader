@@ -27,6 +27,7 @@ function App() {
     setTranscriptionKey,
     saveScannedDocument,
     documentCount,
+    importVideo,
   } = useStorage();
 
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -48,6 +49,16 @@ function App() {
       setSubscribeOpen(false);
     } catch (e) {
       setSubscribeError(e instanceof Error ? e.message : 'Failed to subscribe');
+    }
+  };
+
+  const handleImportVideo = async (url: string) => {
+    setSubscribeError(null);
+    try {
+      await importVideo(url);
+      setSubscribeOpen(false);
+    } catch (e) {
+      setSubscribeError(e instanceof Error ? e.message : 'Failed to import video');
     }
   };
 
@@ -204,7 +215,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-reader-bg text-reader-text font-sans overflow-hidden">
+    <div className="flex h-screen w-screen bg-cream text-ink font-sans overflow-hidden">
       
       <Sidebar
         folders={folders}
@@ -291,6 +302,7 @@ function App() {
           setSubscribeError(null);
         }}
         onSubscribe={handleSubscribe}
+        onImportVideo={handleImportVideo}
         error={subscribeError}
       />
 
