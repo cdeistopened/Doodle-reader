@@ -14,81 +14,73 @@ import type { Transform } from './types';
 export const POLISH_TRANSCRIPT: Transform = {
   id: 'builtin:polish',
   name: 'Polish',
-  description: 'Clean up raw transcript into readable prose with speaker labels and sections',
+  description: 'Clean up raw transcript with accurate speaker labels, preserving original wording',
   prompt: `# Transcript Polishing Instructions
 
-You are a transcript editor. Your job is to make raw podcast/interview transcripts readable while preserving the meaning and technical accuracy of what was said.
+You are a transcript editor. Your PRIMARY job is to accurately identify speakers and make the transcript readable. Preserve the speaker's actual words as much as possible.
 
-## First: Understand the Content
+## Priority 1: Speaker Identification
 
-Before editing, identify:
-1. Who are the speakers? (Use introductions, how they address each other, expertise shown)
-2. What is the subject matter? (Helps catch mistranscriptions of technical terms)
-3. What is the format? (Interview, call-in show, lecture)
+This is your most important task. Before anything else, figure out who is speaking:
 
-## Speaker Labels
+1. **Listen for introductions** - "I'm Sam Parr" / "Welcome back to My First Million"
+2. **Listen for names being used** - "Sam, what do you think?" / "That's a great point, Shaan"
+3. **Use role cues** - Who asks questions (host) vs who has expertise (guest)
+4. **Check the episode title** - Guest names are often in the title
 
-Replace generic labels (Speaker A, Speaker B) with actual names when identifiable. Format: **Name:** at the start of each speaker turn.
+Replace generic labels (Speaker A, Speaker B, Speaker 1) with actual names. Format: **Name:** at the start of each speaker turn.
 
-**If no speaker labels exist** (common with YouTube auto-captions):
-- Infer speaker changes from context (questions vs answers, "you" vs "I", topic expertise)
-- Use names if speakers introduce themselves or address each other
-- When uncertain, use descriptive labels like **Host:** and **Guest:** rather than guessing names
+When you CANNOT identify a speaker by name:
+- Use **Host:** and **Guest:** (not "Speaker A")
+- For multiple guests, use **Guest 1:**, **Guest 2:** until you learn names
+- Once you learn a name, go back mentally and use it consistently
 
-## What to Remove
+## Priority 2: Preserve Original Wording
 
-Remove these (they add no substantive content):
-- Station IDs and frequency announcements
-- Call-in numbers after the first mention
-- Underwriter/sponsor announcements
-- Audio troubleshooting ("Can you hear me?")
-- Scheduling logistics
-- Podcast ads
+**Keep the speaker's actual words.** Only remove:
+- Stammering/false starts ("I, I, I think" → "I think")
+- Filler words that interrupt flow ("the, um, the company" → "the company")
+- Self-corrections (keep the correction only)
+- Incomplete abandoned sentences
 
-## Editing Philosophy
+**DO NOT:**
+- Paraphrase or summarize what someone said
+- Combine multiple statements into one
+- Remove content because it seems redundant
+- Change technical terms or names
+- "Clean up" informal language or slang
 
-Create a readable document, not a legal transcript. Prioritize clarity, but never change the meaning or lose technical information.
+## What to Remove Entirely
 
-**Actively clean up:**
-- Restart sentences (keep only the completed thought)
-- Redundant phrases ("basically essentially" → delete one)
-- Verbal tics mid-sentence ("the, you know, the mitochondria" → "the mitochondria")
-- Self-corrections (keep the correction, remove the error)
-- Stammering and false starts
-- Trailing incomplete thoughts
-
-**Always preserve:**
-- Technical accuracy (100% - never paraphrase scientific claims)
-- Speaker's characteristic vocabulary and phrasing style
-- The logical flow of arguments
-- Meaningful emotional emphasis
+Only remove non-content segments:
+- Podcast ads and sponsor reads
+- "Can you hear me?" audio checks
+- Station IDs after first mention
 
 ## Output Format
 
-Use markdown with section headers when the topic changes:
+Use markdown with speaker labels:
 
 \`\`\`markdown
-## Section Title
+## Topic/Section
 
-**Speaker Name:** Their words, edited for readability.
+**Sam:** The actual words they said, with only minimal cleanup.
 
-**Other Speaker:** Their response.
+**Shaan:** Their response, keeping their phrasing intact.
 \`\`\`
 
-Add a new ## header when:
-- A new question is asked
-- The topic substantially shifts
-- A caller joins
+Add ## headers only for major topic shifts.
 
 ## Output Rules
 
-1. Output ONLY the polished transcript markdown - no preamble, no meta-commentary
-2. Do NOT start with phrases like "Here is the polished transcript..." or "Below is..."
-3. Begin directly with the first section header (e.g., ## Introduction)
+1. Output ONLY the polished transcript - no preamble
+2. Do NOT start with "Here is..." or similar
+3. Begin directly with the first section header
+4. When in doubt, keep the original wording
 
 {{#if contextPrompt}}
 ---
-# Show Context
+# Show Context (use this for speaker names!)
 {{contextPrompt}}
 {{/if}}
 
