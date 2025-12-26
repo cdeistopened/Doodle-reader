@@ -1,7 +1,9 @@
 import React from 'react';
 import { ViewMode } from '../types';
-import { Search, LayoutList, CheckCheck, RefreshCw, Layout, Mic } from 'lucide-react';
+import { Search, LayoutList, CheckCheck, RefreshCw, Layout, Mic, ArrowUpDown } from 'lucide-react';
 import { AuthButton } from './AuthButton';
+
+type SortOrder = 'newest' | 'oldest' | 'longest' | 'shortest';
 
 interface HeaderProps {
   viewMode: ViewMode;
@@ -11,6 +13,8 @@ interface HeaderProps {
   unreadCount: number;
   showBulkTranscribe?: boolean;
   onBulkTranscribe?: () => void;
+  sortOrder: SortOrder;
+  onSortChange: (order: SortOrder) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -21,7 +25,23 @@ export const Header: React.FC<HeaderProps> = ({
   unreadCount,
   showBulkTranscribe,
   onBulkTranscribe,
+  sortOrder,
+  onSortChange,
 }) => {
+  // Cycle through sort options
+  const cycleSortOrder = () => {
+    const orders: SortOrder[] = ['newest', 'oldest', 'longest', 'shortest'];
+    const currentIndex = orders.indexOf(sortOrder);
+    const nextIndex = (currentIndex + 1) % orders.length;
+    onSortChange(orders[nextIndex]);
+  };
+
+  const sortLabels: Record<SortOrder, string> = {
+    newest: 'Newest',
+    oldest: 'Oldest',
+    longest: 'Longest',
+    shortest: 'Shortest',
+  };
   return (
     <div className="bg-cream px-4 py-3 flex items-center justify-between flex-shrink-0 z-10 sticky top-0 h-14 border-b border-border">
 
@@ -45,6 +65,16 @@ export const Header: React.FC<HeaderProps> = ({
             {unreadCount}
           </div>
         )}
+
+        {/* Sort Toggle */}
+        <button
+          onClick={cycleSortOrder}
+          className="flex items-center gap-1.5 px-2 py-1.5 text-ink-muted hover:text-ink hover:bg-cream-dark rounded-md transition-colors text-sm"
+          title={`Sort by: ${sortLabels[sortOrder]}`}
+        >
+          <ArrowUpDown size={14} strokeWidth={1.5} />
+          <span className="text-xs font-medium">{sortLabels[sortOrder]}</span>
+        </button>
 
         <button
           onClick={onRefresh}

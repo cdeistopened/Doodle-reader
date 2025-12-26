@@ -7,7 +7,7 @@ type ImportMode = 'feed' | 'video';
 interface SubscribeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubscribe: (url: string) => Promise<void>;
+  onSubscribe: (url: string, onProgress?: (count: number) => void) => Promise<void>;
   onImportVideo?: (url: string) => Promise<void>;
   error?: string | null;
 }
@@ -26,6 +26,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
   const [internalError, setInternalError] = useState<string | null>(null);
   const [discoveredFeeds, setDiscoveredFeeds] = useState<DiscoveredFeed[]>([]);
   const [selectedFeed, setSelectedFeed] = useState<DiscoveredFeed | null>(null);
+  const [loadingCount, setLoadingCount] = useState(0);
 
   const error = externalError || internalError;
 
@@ -37,6 +38,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
       setDiscoveredFeeds([]);
       setSelectedFeed(null);
       setInternalError(null);
+      setLoadingCount(0);
     }
   }, [isOpen]);
 
@@ -113,6 +115,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
 
     setLoading(true);
     setInternalError(null);
+    setLoadingCount(0);
 
     try {
       if (mode === 'video' && onImportVideo) {
@@ -120,7 +123,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
       } else {
         // Use selected feed URL or the raw query
         const urlToSubscribe = selectedFeed?.url || query;
-        await onSubscribe(urlToSubscribe);
+        await onSubscribe(urlToSubscribe, (count) => setLoadingCount(count));
       }
       setQuery('');
       setMode('feed');
@@ -130,6 +133,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
       setInternalError(err.message || 'Could not process URL. Try checking the format.');
     } finally {
       setLoading(false);
+      setLoadingCount(0);
     }
   };
 
@@ -161,7 +165,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity p-4">
+    <div className="fixed inset-0 bg-ink/20 z-50 flex items-center justify-center transition-opacity p-4">
       <div className="bg-surface w-full max-w-md border-2 border-ink rounded-lg shadow-brutal overflow-hidden font-sans">
 
         {/* Header */}
@@ -337,7 +341,11 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
               className="px-5 py-2 bg-accent text-white font-medium text-sm rounded-md border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50 disabled:shadow-none disabled:transform-none transition-all flex items-center"
             >
               {loading && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-              {mode === 'video' ? 'Import' : 'Subscribe'}
+              {loading && loadingCount > 0
+                ? `Loading ${loadingCount} episodes...`
+                : loading
+                  ? 'Fetching feed...'
+                  : mode === 'video' ? 'Import' : 'Subscribe'}
             </button>
           </div>
         </form>

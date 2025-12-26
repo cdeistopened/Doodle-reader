@@ -35,6 +35,7 @@ function App() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterId, setFilterId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.List);
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'longest' | 'shortest'>('newest');
 
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -45,10 +46,10 @@ function App() {
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
 
-  const handleSubscribe = async (url: string) => {
+  const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
     setSubscribeError(null);
     try {
-      await subscribe(url);
+      await subscribe(url, onProgress);
       setSubscribeOpen(false);
     } catch (e) {
       setSubscribeError(e instanceof Error ? e.message : 'Failed to subscribe');
@@ -65,7 +66,7 @@ function App() {
     }
   };
 
-  // Filter Logic
+  // Filter and Sort Logic
   const filteredItems = useMemo(() => {
     let result = items;
     if (filterType === 'starred') {
@@ -81,8 +82,26 @@ function App() {
     } else if (filterType === 'feed' && filterId) {
       result = items.filter(i => i.feedId === filterId);
     }
-    return result;
-  }, [items, filterType, filterId]);
+
+    // Apply sorting
+    const sorted = [...result].sort((a, b) => {
+      switch (sortOrder) {
+        case 'oldest':
+          return a.timestamp - b.timestamp;
+        case 'longest':
+          // Sort by content length (longer first)
+          return (b.content?.length || 0) - (a.content?.length || 0);
+        case 'shortest':
+          // Sort by content length (shorter first)
+          return (a.content?.length || 0) - (b.content?.length || 0);
+        case 'newest':
+        default:
+          return b.timestamp - a.timestamp;
+      }
+    });
+
+    return sorted;
+  }, [items, filterType, filterId, sortOrder]);
 
   // Actions
   const handleOpenItem = useCallback((id: string) => {
@@ -259,6 +278,8 @@ function App() {
           unreadCount={filteredItems.filter(i => !i.isRead).length}
           showBulkTranscribe={isPodcastFeed}
           onBulkTranscribe={() => setBulkTranscribeOpen(true)}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
         />
 
         {/* Error Banner */}

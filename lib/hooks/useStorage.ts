@@ -42,7 +42,7 @@ interface UseStorageReturn {
   stats: StorageStats | null;
 
   // Actions
-  subscribe: (url: string) => Promise<void>;
+  subscribe: (url: string, onProgress?: (count: number) => void) => Promise<void>;
   unsubscribe: (feedId: string, deleteItems?: boolean) => Promise<void>;
   refreshFeeds: () => Promise<void>;
   refreshFeed: (feedId: string) => Promise<void>;
@@ -156,7 +156,7 @@ export function useStorage(): UseStorageReturn {
   };
 
   // Subscribe to a new feed
-  const subscribe = useCallback(async (url: string) => {
+  const subscribe = useCallback(async (url: string, onProgress?: (count: number) => void) => {
     setLoading(true);
     setError(null);
     try {
@@ -172,13 +172,18 @@ export function useStorage(): UseStorageReturn {
       const newFeed = convertFeedSource(source);
       await storage.saveFeed(newFeed);
 
-      // Convert and save items
+      // Convert and save items with progress updates
       const docs = convertFeedItems(newItems, source.url, source.name);
+      let savedCount = 0;
       for (const doc of docs) {
         // Check if item already exists (by ID)
         const existingDoc = await storage.getDocument(doc.id);
         if (!existingDoc) {
           await storage.saveDocument(doc);
+        }
+        savedCount++;
+        if (onProgress) {
+          onProgress(savedCount);
         }
       }
 
