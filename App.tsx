@@ -23,6 +23,7 @@ function App() {
     markAsRead,
     toggleStar,
     markAllRead,
+    updateSummary,
     transcribeItem,
     hasTranscriptionKey,
     setTranscriptionKey,
@@ -304,6 +305,7 @@ function App() {
             onTranscribe={transcribeItem}
             hasTranscriptionKey={hasTranscriptionKey}
             setTranscriptionKey={setTranscriptionKey}
+            onUpdateSummary={updateSummary}
           />
         )}
       </div>

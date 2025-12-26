@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { FeedItem, ViewMode, FeedSource } from '../types';
 import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X } from 'lucide-react';
 import { getTranscript } from '../lib/youtube';
-import { storage } from '../lib/storage';
 import { TransformPanel } from './TransformPanel';
 import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
@@ -43,6 +42,7 @@ interface FeedListProps {
   onTranscribe?: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void) => Promise<void>;
   hasTranscriptionKey?: () => boolean;
   setTranscriptionKey?: (key: string) => void;
+  onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
 }
 
 export const FeedList: React.FC<FeedListProps> = ({
@@ -60,6 +60,7 @@ export const FeedList: React.FC<FeedListProps> = ({
   onTranscribe,
   hasTranscriptionKey,
   setTranscriptionKey,
+  onUpdateSummary,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
@@ -246,6 +247,7 @@ export const FeedList: React.FC<FeedListProps> = ({
               onToggleStar={onToggleStar}
               onTranscribe={(id) => handleTranscribe(id)}
               isTranscribing={transcribingId === item.id}
+              onUpdateSummary={onUpdateSummary}
             />
           </article>
         </div>
@@ -276,6 +278,7 @@ export const FeedList: React.FC<FeedListProps> = ({
                   onToggleStar={onToggleStar}
                   onTranscribe={(id) => handleTranscribe(id)}
                   isTranscribing={transcribingId === item.id}
+                  onUpdateSummary={onUpdateSummary}
                 />
               </article>
             );
@@ -552,11 +555,18 @@ interface ExpandedCardProps {
   onToggleStar: any;
   onTranscribe?: (itemId: string) => void;
   isTranscribing?: boolean;
+  onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
 }
 
-const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing }: ExpandedCardProps) => {
+const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdateSummary }: ExpandedCardProps) => {
   // Transform outputs - can have multiple
-  const [transformOutputs, setTransformOutputs] = useState<Array<{ id: string; title: string; content: string }>>([]);
+  // Initialize with saved aiSummary if it exists (persists polished content across navigation)
+  const [transformOutputs, setTransformOutputs] = useState<Array<{ id: string; title: string; content: string }>>(() => {
+    if (item.aiSummary) {
+      return [{ id: 'saved', title: 'Polished', content: item.aiSummary }];
+    }
+    return [];
+  });
   const [rawTranscript, setRawTranscript] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -564,6 +574,18 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing }: Expand
   // Toggle states
   const [showTranscript, setShowTranscript] = useState(true); // Default open for videos
   const [showDescription, setShowDescription] = useState(false);
+
+  // Sync transformOutputs when item changes (e.g., navigating between items)
+  useEffect(() => {
+    if (item.aiSummary) {
+      setTransformOutputs([{ id: 'saved', title: 'Polished', content: item.aiSummary }]);
+    } else {
+      setTransformOutputs([]);
+    }
+    // Reset other state when item changes
+    setRawTranscript(null);
+    setFetchError(null);
+  }, [item.id, item.aiSummary]);
 
   const isVideo = item.mediaType === 'video' || (item.url && (item.url.includes('youtube.com') || item.url.includes('youtu.be')));
   const isPodcast = item.mediaType === 'audio' || !!item.audioUrl;
@@ -623,7 +645,10 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing }: Expand
       content: result.output,
     };
     setTransformOutputs(prev => [...prev, newOutput]);
-    await storage.updateSummary(item.id, result.output);
+    // Use the hook's updateSummary to persist AND update React state
+    if (onUpdateSummary) {
+      await onUpdateSummary(item.id, result.output);
+    }
   };
 
   const handleRemoveOutput = (id: string) => {

@@ -1,0 +1,12 @@
+{
+  "name": "transcribe-sandbox",
+  "version": "1.0.0",
+  "description": "Sandbox for testing Gemini vs AssemblyAI transcription",
+  "type": "module",
+  "scripts": {
+    "compare": "node transcribe-compare.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  }
+}
