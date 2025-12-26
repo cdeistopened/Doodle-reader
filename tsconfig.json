@@ -33,6 +33,7 @@
   "exclude": [
     "node_modules",
     "dist",
+    "temporary",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",
