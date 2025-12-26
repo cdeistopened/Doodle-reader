@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 
 interface SidebarProps {
@@ -59,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const totalUnread = getUnreadCount();
   const starredCount = items.filter(i => i.isStarred).length;
   const videoCount = items.filter(i => i.mediaType === 'video').length;
+  const processedCount = items.filter(i => i.transcriptionStatus === 'complete').length;
 
   const SidebarItem = ({
     label,
@@ -186,6 +187,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           count={videoCount}
           isActive={activeFilter === 'video'}
           onClick={() => onNavigate('video')}
+        />
+        <SidebarItem
+          label="Processed"
+          icon={Sparkles}
+          count={processedCount}
+          isActive={activeFilter === 'processed'}
+          onClick={() => onNavigate('processed')}
         />
         <SidebarItem
           label="Documents"

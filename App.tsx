@@ -71,6 +71,9 @@ function App() {
       result = items.filter(i => i.isStarred);
     } else if (filterType === 'video') {
       result = items.filter(i => i.mediaType === 'video');
+    } else if (filterType === 'processed') {
+      // Processed filter - show items with completed transcriptions
+      result = items.filter(i => i.transcriptionStatus === 'complete');
     } else if (filterType === 'folder' && filterId === 'documents') {
       // Documents filter - show scanned PDFs
       result = items.filter(i => i.feedId === 'scanned-documents');

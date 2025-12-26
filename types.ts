@@ -41,7 +41,7 @@ export interface Folder {
   isOpen: boolean;
 }
 
-export type FilterType = 'all' | 'starred' | 'video' | 'folder' | 'feed';
+export type FilterType = 'all' | 'starred' | 'video' | 'folder' | 'feed' | 'processed';
 
 export interface FeedStats {
   totalUnread: number;
