@@ -133,82 +133,82 @@ export const FeedList: React.FC<FeedListProps> = ({
     const sourceName = getSourceName(item.feedId);
 
     return (
-      <div className="flex-grow flex flex-col h-full bg-cream overflow-hidden">
+      <div className="flex-grow flex flex-col h-full bg-cream overflow-hidden fixed md:relative inset-0 z-40 md:z-auto">
         {/* Reading Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface flex-shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-3 md:px-4 py-3 border-b border-border bg-surface flex-shrink-0">
+          <div className="flex items-center gap-1 md:gap-2">
             <button
               onClick={onBackToList}
-              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
               title="Back to list"
             >
-              <ArrowLeft size={18} strokeWidth={1.5} />
+              <ArrowLeft size={20} strokeWidth={1.5} />
             </button>
-            <div className="h-5 w-px bg-border mx-1"></div>
-            <button className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors" title="Archive">
+            <div className="h-5 w-px bg-border mx-1 hidden md:block"></div>
+            <button className="p-2 min-w-[44px] min-h-[44px] hidden md:flex items-center justify-center hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors" title="Archive">
               <CheckCircle2 size={18} strokeWidth={1.5} />
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-ink-muted tabular-nums mr-2">
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="text-xs text-ink-muted tabular-nums mr-1 md:mr-2">
               {items.findIndex(i => i.id === expandedId) + 1} / {items.length}
             </span>
             <button
               onClick={onPrevItem}
-              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
             >
-              <ChevronLeft size={18} strokeWidth={1.5} />
+              <ChevronLeft size={20} strokeWidth={1.5} />
             </button>
             <button
               onClick={onNextItem}
-              className="p-2 hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md text-ink-muted hover:text-ink transition-colors"
             >
-              <ChevronRight size={18} strokeWidth={1.5} />
+              <ChevronRight size={20} strokeWidth={1.5} />
             </button>
           </div>
         </div>
 
         {/* Content Scroll Area */}
-        <div className="flex-grow overflow-y-auto p-6 md:p-8">
+        <div className="flex-grow overflow-y-auto p-4 md:p-8">
           <article className="max-w-3xl mx-auto">
             {/* Article Header */}
-            <header className="mb-8 pb-6 border-b border-border">
-              <h1 className="font-serif text-2xl md:text-3xl font-semibold text-ink leading-tight mb-4">
+            <header className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-border">
+              <h1 className="font-serif text-xl md:text-3xl font-semibold text-ink leading-tight mb-3 md:mb-4">
                 {item.title}
               </h1>
 
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-md bg-accent text-white flex items-center justify-center font-semibold text-sm uppercase select-none">
+                  <div className="w-9 h-9 rounded-md bg-accent text-white flex items-center justify-center font-semibold text-sm uppercase select-none flex-shrink-0">
                     {(item.author || sourceName).substring(0, 1)}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     {/* Channel/Author name - linked if we have authorUrl */}
                     {item.authorUrl ? (
                       <a
                         href={item.authorUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm font-medium text-ink hover:text-accent transition-colors"
+                        className="text-sm font-medium text-ink hover:text-accent transition-colors block truncate"
                       >
                         {item.author || sourceName}
                       </a>
                     ) : (
-                      <div className="text-sm font-medium text-ink">
+                      <div className="text-sm font-medium text-ink truncate">
                         {item.author || sourceName}
                       </div>
                     )}
                     {/* Date with open original link */}
-                    <div className="text-xs text-ink-muted flex items-center gap-2">
+                    <div className="text-xs text-ink-muted flex items-center gap-2 flex-wrap">
                       <span>
                         {new Date(item.timestamp).toLocaleDateString('en-US', {
-                          month: 'long',
+                          month: 'short',
                           day: 'numeric',
                           year: 'numeric'
                         })}
                       </span>
-                      <span className="text-border">•</span>
+                      <span className="text-border hidden sm:inline">•</span>
                       <a
                         href={item.url}
                         target="_blank"
@@ -216,25 +216,26 @@ export const FeedList: React.FC<FeedListProps> = ({
                         className="hover:text-accent transition-colors flex items-center gap-1"
                       >
                         <ExternalLink size={10} strokeWidth={1.5} />
-                        <span>Open original</span>
+                        <span className="hidden sm:inline">Open original</span>
+                        <span className="sm:hidden">Original</span>
                       </a>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 -ml-2 sm:ml-0">
                   <button
                     onClick={(e) => onToggleStar(e, item.id)}
-                    className="p-2 hover:bg-cream-warm rounded-md transition-colors"
+                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md transition-colors"
                   >
                     <Star
-                      size={18}
+                      size={20}
                       strokeWidth={1.5}
                       className={item.isStarred ? 'fill-status-warning text-status-warning' : 'text-ink-muted hover:text-ink'}
                     />
                   </button>
-                  <button className="p-2 hover:bg-cream-warm rounded-md transition-colors">
-                    <Share2 size={18} strokeWidth={1.5} className="text-ink-muted hover:text-ink" />
+                  <button className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md transition-colors">
+                    <Share2 size={20} strokeWidth={1.5} className="text-ink-muted hover:text-ink" />
                   </button>
                 </div>
               </div>
@@ -308,64 +309,113 @@ export const FeedList: React.FC<FeedListProps> = ({
               onOpenItem(item.id);
             }}
             className={`
-              flex items-center px-4 py-3 cursor-pointer border-b border-border-muted relative group transition-colors
+              px-3 md:px-4 py-3 cursor-pointer border-b border-border-muted relative group transition-colors min-h-[60px] md:min-h-0
               ${isSelected ? 'bg-accent-soft' : 'hover:bg-cream'}
               ${!isRead ? 'bg-surface' : 'bg-surface-sunken'}
             `}
           >
-            {/* Star */}
-            <div
-              className="w-8 flex-shrink-0 flex items-center justify-center mr-2"
-              onClick={(e) => onToggleStar(e, item.id)}
-            >
-              <Star
-                size={16}
-                strokeWidth={1.5}
-                className={`transition-all cursor-pointer ${item.isStarred ? 'fill-status-warning text-status-warning' : 'text-border hover:text-ink-muted'}`}
-              />
+            {/* Mobile Layout */}
+            <div className="flex md:hidden items-start gap-3">
+              {/* Star - larger tap target on mobile */}
+              <div
+                className="flex-shrink-0 p-1 -m-1"
+                onClick={(e) => onToggleStar(e, item.id)}
+              >
+                <Star
+                  size={18}
+                  strokeWidth={1.5}
+                  className={`transition-all cursor-pointer ${item.isStarred ? 'fill-status-warning text-status-warning' : 'text-border'}`}
+                />
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  {/* Type Icon */}
+                  {isVideo && <Youtube size={12} className="text-status-error flex-shrink-0" strokeWidth={1.5} />}
+                  {isPodcast && (
+                    isTranscribed
+                      ? <Check size={12} className="text-status-success flex-shrink-0" strokeWidth={2} />
+                      : <PenTool size={12} className="text-accent flex-shrink-0" strokeWidth={1.5} />
+                  )}
+                  {/* Title */}
+                  <span className={`truncate text-sm leading-tight ${!isRead ? 'text-ink font-medium' : 'text-ink-soft'}`}>
+                    {item.title || '(No Title)'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-ink-muted">
+                  <span className="truncate">{sourceName}</span>
+                  <span>•</span>
+                  <span className="flex-shrink-0 tabular-nums">{formatTime(item.timestamp)}</span>
+                  {isPodcast && item.duration && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center flex-shrink-0">
+                        <Clock size={10} className="mr-0.5" strokeWidth={1.5} />
+                        {formatDuration(item.duration)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Type Icon */}
-            <div className="w-6 flex-shrink-0 flex items-center justify-center mr-3">
-              {isVideo && <Youtube size={14} className="text-status-error" strokeWidth={1.5} />}
-              {isPodcast && (
-                isTranscribed
-                  ? <Check size={14} className="text-status-success" strokeWidth={2} />
-                  : <PenTool size={14} className="text-accent" strokeWidth={1.5} />
-              )}
-            </div>
+            {/* Desktop Layout */}
+            <div className="hidden md:flex items-center">
+              {/* Star */}
+              <div
+                className="w-8 flex-shrink-0 flex items-center justify-center mr-2"
+                onClick={(e) => onToggleStar(e, item.id)}
+              >
+                <Star
+                  size={16}
+                  strokeWidth={1.5}
+                  className={`transition-all cursor-pointer ${item.isStarred ? 'fill-status-warning text-status-warning' : 'text-border hover:text-ink-muted'}`}
+                />
+              </div>
 
-            {/* Title */}
-            <div className="flex-1 min-w-0 mr-4">
-              <span className={`block truncate text-sm ${!isRead ? 'text-ink font-medium' : 'text-ink-soft'}`}>
-                {item.title || '(No Title)'}
-              </span>
-            </div>
+              {/* Type Icon */}
+              <div className="w-6 flex-shrink-0 flex items-center justify-center mr-3">
+                {isVideo && <Youtube size={14} className="text-status-error" strokeWidth={1.5} />}
+                {isPodcast && (
+                  isTranscribed
+                    ? <Check size={14} className="text-status-success" strokeWidth={2} />
+                    : <PenTool size={14} className="text-accent" strokeWidth={1.5} />
+                )}
+              </div>
 
-            {/* Source */}
-            <div className={`w-32 flex-shrink-0 truncate text-xs mr-4 ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
-              {sourceName}
-            </div>
-
-            {/* Snippet (hidden on small screens) */}
-            <div className="flex-1 min-w-0 truncate text-ink-muted text-xs hidden xl:block mr-4">
-              {isPodcast && item.duration ? (
-                <span className="flex items-center">
-                  <Clock size={10} className="mr-1" strokeWidth={1.5} />
-                  {formatDuration(item.duration)}
+              {/* Title */}
+              <div className="flex-1 min-w-0 mr-4">
+                <span className={`block truncate text-sm ${!isRead ? 'text-ink font-medium' : 'text-ink-soft'}`}>
+                  {item.title || '(No Title)'}
                 </span>
-              ) : (
-                item.snippet
-              )}
+              </div>
+
+              {/* Source */}
+              <div className={`w-32 flex-shrink-0 truncate text-xs mr-4 ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
+                {sourceName}
+              </div>
+
+              {/* Snippet (hidden on small screens) */}
+              <div className="flex-1 min-w-0 truncate text-ink-muted text-xs hidden xl:block mr-4">
+                {isPodcast && item.duration ? (
+                  <span className="flex items-center">
+                    <Clock size={10} className="mr-1" strokeWidth={1.5} />
+                    {formatDuration(item.duration)}
+                  </span>
+                ) : (
+                  item.snippet
+                )}
+              </div>
+
+              {/* Date */}
+              <div className={`w-16 flex-shrink-0 text-right text-xs tabular-nums ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
+                {formatTime(item.timestamp)}
+              </div>
             </div>
 
-            {/* Date */}
-            <div className={`w-16 flex-shrink-0 text-right text-xs tabular-nums ${!isRead ? 'text-ink-muted font-medium' : 'text-ink-muted'}`}>
-              {formatTime(item.timestamp)}
-            </div>
-
-            {/* Hover Actions */}
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-surface border border-border rounded-md px-1 py-0.5 hidden group-hover:flex items-center gap-0.5 shadow-soft">
+            {/* Hover Actions - desktop only */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-surface border border-border rounded-md px-1 py-0.5 hidden group-hover:md:flex items-center gap-0.5 shadow-soft">
               {isPodcast && !isTranscribed && item.transcriptionStatus !== 'processing' && item.transcriptionStatus !== 'pending' && (
                 <button
                   className="p-1.5 hover:bg-accent-soft rounded text-accent"

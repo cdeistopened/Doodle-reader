@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles, Menu } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 
 interface SidebarProps {
@@ -15,6 +15,8 @@ interface SidebarProps {
   onScanPdf?: () => void;
   onFolderScan?: () => void;
   documentCount?: number;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +31,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onScanPdf,
   onFolderScan,
   documentCount = 0,
+  isOpen = true,
+  onClose,
 }) => {
   const [confirmUnsubscribe, setConfirmUnsubscribe] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState('');
@@ -117,175 +121,237 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 
+  // Handle navigation with auto-close on mobile
+  const handleNavigate = (type: FilterType, id?: string) => {
+    onNavigate(type, id);
+    onClose?.(); // Close sidebar on mobile after navigation
+  };
+
+  const handleSubscribeClick = () => {
+    onSubscribe();
+    onClose?.();
+  };
+
+  const handleScanPdf = () => {
+    onScanPdf?.();
+    onClose?.();
+  };
+
+  const handleFolderScan = () => {
+    onFolderScan?.();
+    onClose?.();
+  };
+
   return (
-    <div className="w-[260px] bg-cream-warm border-r border-border flex-shrink-0 h-full overflow-y-auto flex flex-col">
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && onClose && (
+        <div
+          className="fixed inset-0 bg-ink/30 z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
 
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-border">
-        <div className="flex items-center gap-2 select-none">
-          <div className="w-8 h-8 bg-accent border-2 border-ink rounded-md shadow-brutal-sm flex items-center justify-center">
-            <span className="font-mono text-white text-lg font-bold leading-none">d</span>
+      {/* Sidebar */}
+      <div className={`
+        fixed md:relative z-50 md:z-auto
+        w-[280px] md:w-[260px] bg-cream-warm border-r border-border flex-shrink-0 h-full overflow-y-auto flex flex-col
+        transform transition-transform duration-300 ease-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2 select-none">
+            <div className="w-8 h-8 bg-accent border-2 border-ink rounded-md shadow-brutal-sm flex items-center justify-center">
+              <span className="font-mono text-white text-lg font-bold leading-none">d</span>
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="font-mono text-base font-bold text-ink tracking-tight">doodle</span>
+              <span className="font-mono text-[10px] text-ink-muted uppercase tracking-widest">reader</span>
+            </div>
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="font-mono text-base font-bold text-ink tracking-tight">doodle</span>
-            <span className="font-mono text-[10px] text-ink-muted uppercase tracking-widest">reader</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="p-3 space-y-2">
-        <button
-          onClick={onSubscribe}
-          className="w-full bg-accent hover:bg-accent-muted text-white transition-all rounded-md h-10 flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-        >
-          <Plus size={18} strokeWidth={2} />
-          <span className="font-medium text-sm">Subscribe</span>
-        </button>
-
-        <div className="flex gap-2">
-          {onScanPdf && (
+          {/* Close button on mobile */}
+          {onClose && (
             <button
-              onClick={onScanPdf}
-              className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+              onClick={onClose}
+              className="md:hidden p-2 -mr-2 text-ink-muted hover:text-ink hover:bg-cream-dark rounded-md transition-colors"
             >
-              <ScanLine size={14} strokeWidth={1.5} />
-              <span className="font-medium text-xs">PDF</span>
-            </button>
-          )}
-          {onFolderScan && (
-            <button
-              onClick={onFolderScan}
-              className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
-            >
-              <FolderOpen size={14} strokeWidth={1.5} />
-              <span className="font-medium text-xs">Folder</span>
+              <X size={20} strokeWidth={1.5} />
             </button>
           )}
         </div>
-      </div>
 
-      {/* Navigation */}
-      <div className="flex-grow py-2">
-        <SidebarItem
-          label="Inbox"
-          icon={Inbox}
-          count={totalUnread}
-          isActive={activeFilter === 'all'}
-          onClick={() => onNavigate('all')}
-        />
-        <SidebarItem
-          label="Starred"
-          icon={Star}
-          count={starredCount}
-          isActive={activeFilter === 'starred'}
-          onClick={() => onNavigate('starred')}
-        />
-        <SidebarItem
-          label="Videos"
-          icon={PlaySquare}
-          count={videoCount}
-          isActive={activeFilter === 'video'}
-          onClick={() => onNavigate('video')}
-        />
-        <SidebarItem
-          label="Processed"
-          icon={Sparkles}
-          count={processedCount}
-          isActive={activeFilter === 'processed'}
-          onClick={() => onNavigate('processed')}
-        />
-        <SidebarItem
-          label="Documents"
-          icon={FileText}
-          count={documentCount}
-          isActive={activeFilter === 'folder' && activeId === 'documents'}
-          onClick={() => onNavigate('folder', 'documents')}
-        />
-
-        {/* Feeds Section */}
-        <div className="mt-4 pt-4 border-t border-border mx-3">
-          <div className="px-1 pb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Feeds</span>
-            <span className="text-xs text-ink-muted">{feeds.filter(f => !f.folderId).length}</span>
-          </div>
-
-          {/* Feed Search */}
-          {feeds.filter(f => !f.folderId).length > 5 && (
-            <div className="relative mb-2">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
-              <input
-                type="text"
-                value={feedFilter}
-                onChange={(e) => setFeedFilter(e.target.value)}
-                placeholder="Filter feeds..."
-                className="w-full pl-7 pr-2 py-1.5 text-xs bg-surface border border-border rounded focus:outline-none focus:border-accent placeholder-ink-muted"
-              />
-              {feedFilter && (
-                <button
-                  onClick={() => setFeedFilter('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
-                >
-                  <X size={10} />
-                </button>
-              )}
-            </div>
-          )}
-
-          {filteredFeeds.map(feed => (
-            <SidebarItem
-              key={feed.id}
-              label={feed.name}
-              icon={Rss}
-              color={feed.color}
-              count={getUnreadCount(feed.id)}
-              isActive={activeFilter === 'feed' && activeId === feed.id}
-              onClick={() => onNavigate('feed', feed.id)}
-              isFeed={true}
-              feedId={feed.id}
-            />
-          ))}
-
-          {feedFilter && filteredFeeds.length === 0 && (
-            <div className="px-3 py-2 text-xs text-ink-muted italic">
-              No feeds match "{feedFilter}"
-            </div>
-          )}
-
-          {folders.map(folder => (
-            <div key={folder.id}>
-              <SidebarItem label={folder.name} icon={FolderIcon} count={0} isActive={false} onClick={() => {}} />
-            </div>
-          ))}
-        </div>
-
-        {/* Utilities Section */}
-        <div className="mt-4 pt-4 border-t border-border mx-3">
-          <div className="px-1 pb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
-          </div>
-
-          <a
-            href="http://localhost:5001"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink"
+        {/* Action Buttons */}
+        <div className="p-3 space-y-2">
+          <button
+            onClick={handleSubscribeClick}
+            className="w-full bg-accent hover:bg-accent-muted text-white transition-all rounded-md h-10 md:h-10 min-h-[44px] flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
           >
-            <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
-              <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
-            </div>
-            <span className="flex-grow truncate text-sm">Page Snap</span>
-            <ExternalLink size={12} className="text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-          </a>
-        </div>
-      </div>
+            <Plus size={18} strokeWidth={2} />
+            <span className="font-medium text-sm">Subscribe</span>
+          </button>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-border">
-        <div className="text-xs text-ink-muted text-center">
-          <span className="font-mono">⌘K</span> to search
+          <div className="flex gap-2">
+            {onScanPdf && (
+              <button
+                onClick={handleScanPdf}
+                className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md min-h-[44px] md:h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+              >
+                <ScanLine size={14} strokeWidth={1.5} />
+                <span className="font-medium text-xs">PDF</span>
+              </button>
+            )}
+            {onFolderScan && (
+              <button
+                onClick={handleFolderScan}
+                className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md min-h-[44px] md:h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+              >
+                <FolderOpen size={14} strokeWidth={1.5} />
+                <span className="font-medium text-xs">Folder</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex-grow py-2">
+          <SidebarItem
+            label="Inbox"
+            icon={Inbox}
+            count={totalUnread}
+            isActive={activeFilter === 'all'}
+            onClick={() => handleNavigate('all')}
+          />
+          <SidebarItem
+            label="Starred"
+            icon={Star}
+            count={starredCount}
+            isActive={activeFilter === 'starred'}
+            onClick={() => handleNavigate('starred')}
+          />
+          <SidebarItem
+            label="Videos"
+            icon={PlaySquare}
+            count={videoCount}
+            isActive={activeFilter === 'video'}
+            onClick={() => handleNavigate('video')}
+          />
+          <SidebarItem
+            label="Processed"
+            icon={Sparkles}
+            count={processedCount}
+            isActive={activeFilter === 'processed'}
+            onClick={() => handleNavigate('processed')}
+          />
+          <SidebarItem
+            label="Documents"
+            icon={FileText}
+            count={documentCount}
+            isActive={activeFilter === 'folder' && activeId === 'documents'}
+            onClick={() => handleNavigate('folder', 'documents')}
+          />
+
+          {/* Feeds Section */}
+          <div className="mt-4 pt-4 border-t border-border mx-3">
+            <div className="px-1 pb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Feeds</span>
+              <span className="text-xs text-ink-muted">{feeds.filter(f => !f.folderId).length}</span>
+            </div>
+
+            {/* Feed Search */}
+            {feeds.filter(f => !f.folderId).length > 5 && (
+              <div className="relative mb-2">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+                <input
+                  type="text"
+                  value={feedFilter}
+                  onChange={(e) => setFeedFilter(e.target.value)}
+                  placeholder="Filter feeds..."
+                  className="w-full pl-7 pr-2 py-1.5 text-xs bg-surface border border-border rounded focus:outline-none focus:border-accent placeholder-ink-muted"
+                />
+                {feedFilter && (
+                  <button
+                    onClick={() => setFeedFilter('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {filteredFeeds.map(feed => (
+              <SidebarItem
+                key={feed.id}
+                label={feed.name}
+                icon={Rss}
+                color={feed.color}
+                count={getUnreadCount(feed.id)}
+                isActive={activeFilter === 'feed' && activeId === feed.id}
+                onClick={() => handleNavigate('feed', feed.id)}
+                isFeed={true}
+                feedId={feed.id}
+              />
+            ))}
+
+            {feedFilter && filteredFeeds.length === 0 && (
+              <div className="px-3 py-2 text-xs text-ink-muted italic">
+                No feeds match "{feedFilter}"
+              </div>
+            )}
+
+            {folders.map(folder => (
+              <div key={folder.id}>
+                <SidebarItem label={folder.name} icon={FolderIcon} count={0} isActive={false} onClick={() => {}} />
+              </div>
+            ))}
+          </div>
+
+          {/* Utilities Section */}
+          <div className="mt-4 pt-4 border-t border-border mx-3">
+            <div className="px-1 pb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
+            </div>
+
+            <a
+              href="http://localhost:5001"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink min-h-[44px] md:min-h-0"
+            >
+              <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
+                <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
+              </div>
+              <span className="flex-grow truncate text-sm">Page Snap</span>
+              <ExternalLink size={12} className="text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
+            </a>
+          </div>
+        </div>
+
+        {/* Footer - hidden on mobile */}
+        <div className="p-3 border-t border-border hidden md:block">
+          <div className="text-xs text-ink-muted text-center">
+            <span className="font-mono">⌘K</span> to search
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
+
+// Mobile hamburger button to be exported
+export const MobileMenuButton: React.FC<{ onClick: () => void; unreadCount?: number }> = ({ onClick, unreadCount = 0 }) => (
+  <button
+    onClick={onClick}
+    className="md:hidden p-2 -ml-2 text-ink hover:bg-cream-dark rounded-md transition-colors relative"
+    aria-label="Open menu"
+  >
+    <Menu size={22} strokeWidth={1.5} />
+    {unreadCount > 0 && (
+      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-accent text-white text-[10px] font-medium rounded-full flex items-center justify-center">
+        {unreadCount > 9 ? '9+' : unreadCount}
+      </span>
+    )}
+  </button>
+);

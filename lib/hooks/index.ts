@@ -3,3 +3,4 @@
  */
 
 export { useStorage } from './useStorage';
+export { useMobile } from './useMobile';

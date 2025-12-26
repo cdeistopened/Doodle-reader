@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, MobileMenuButton } from './components/Sidebar';
 import { FeedList } from './components/FeedList';
 import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
@@ -7,7 +7,7 @@ import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
 import { ViewMode, FilterType } from './types';
-import { useStorage } from './lib/hooks/useStorage';
+import { useStorage, useMobile } from './lib/hooks';
 
 function App() {
   // Use the new unified storage hook - replaces direct db usage
@@ -32,6 +32,8 @@ function App() {
     importVideo,
   } = useStorage();
 
+  const isMobile = useMobile();
+
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterId, setFilterId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.List);
@@ -45,6 +47,7 @@ function App() {
   const [isScanOpen, setScanOpen] = useState(false);
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
     setSubscribeError(null);
@@ -264,6 +267,8 @@ function App() {
         onScanPdf={() => setScanOpen(true)}
         onFolderScan={() => setFolderScanOpen(true)}
         documentCount={documentCount}
+        isOpen={isSidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <div className="flex flex-col flex-grow h-full overflow-hidden relative">
@@ -280,6 +285,8 @@ function App() {
           onBulkTranscribe={() => setBulkTranscribeOpen(true)}
           sortOrder={sortOrder}
           onSortChange={setSortOrder}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          isMobile={isMobile}
         />
 
         {/* Error Banner */}
