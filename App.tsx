@@ -7,11 +7,10 @@ import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
 import { ViewMode, FilterType, FeedItem, FeedSource } from './types';
-import { useStorage, useConvexStorageHook, useMobile } from './lib/hooks';
-import { ConvexStorageProvider } from './lib/storage/convex-provider';
+import { useStorage, useConvexStorageHook, useHybridStorage, useMobile } from './lib/hooks';
 import type { Folder } from './lib/storage';
 
-export type StorageMode = 'local' | 'convex';
+export type StorageMode = 'local' | 'convex' | 'hybrid';
 
 interface AppProps {
   storageMode?: StorageMode;
@@ -397,7 +396,17 @@ function LocalApp() {
 }
 
 /**
- * Convex storage wrapper - uses Convex cloud storage
+ * Hybrid storage wrapper - local for feeds, Convex for saved content
+ * Uses local IndexedDB for fast feed/article operations,
+ * syncs to Convex only when user explicitly saves/transcribes (and is authenticated)
+ */
+function HybridApp() {
+  const storage = useHybridStorage();
+  return <AppContent storage={storage} />;
+}
+
+/**
+ * Convex storage wrapper - uses Convex cloud storage (legacy, not recommended)
  * Must be rendered inside ConvexStorageProvider
  */
 function ConvexApp() {
@@ -407,15 +416,21 @@ function ConvexApp() {
 
 /**
  * Main App component - chooses storage backend based on storageMode prop
+ *
+ * Modes:
+ * - 'hybrid' (default when Clerk+Convex configured): Local feeds, Convex for saved content
+ * - 'local': Pure IndexedDB, no cloud sync
+ * - 'convex': All data in Convex (legacy, slow for large feeds)
  */
 function App({ storageMode = 'local' }: AppProps) {
+  if (storageMode === 'hybrid') {
+    // Hybrid mode: local feeds + Convex for saved content
+    return <HybridApp />;
+  }
+
   if (storageMode === 'convex') {
-    // Convex mode requires the ConvexStorageProvider wrapper
-    return (
-      <ConvexStorageProvider>
-        <ConvexApp />
-      </ConvexStorageProvider>
-    );
+    // Legacy Convex mode - all operations go to Convex
+    return <ConvexApp />;
   }
 
   // Default: local IndexedDB storage

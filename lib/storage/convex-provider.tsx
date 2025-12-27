@@ -450,13 +450,24 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
 }
 
 // =============================================================================
-// HOOK
+// HOOKS
 // =============================================================================
 
+/**
+ * Required hook - throws if not inside ConvexStorageProvider
+ */
 export function useConvexStorage(): ConvexStorageContextType {
   const context = useContext(ConvexStorageContext);
   if (!context) {
     throw new Error('useConvexStorage must be used within a ConvexStorageProvider');
   }
   return context;
+}
+
+/**
+ * Optional hook - returns null if not inside ConvexStorageProvider
+ * Use this for hybrid storage where Convex is optional
+ */
+export function useConvexStorageOptional(): ConvexStorageContextType | null {
+  return useContext(ConvexStorageContext);
 }
