@@ -120,19 +120,25 @@ export function useConvexStorageHook(): UseStorageReturn {
         throw new Error('Already subscribed to this feed');
       }
 
-      // Convert and save feed
-      const newFeed = convertFeedSource(source);
-      const feedId = await convex.saveFeed(newFeed);
+      // Convert and save feed (strip id so Convex generates its own)
+      const { id: _oldId, ...newFeedWithoutId } = convertFeedSource(source);
+      const feedId = await convex.saveFeed(newFeedWithoutId);
 
       // Convert and save items with progress updates
+      // Use Convex-generated feedId instead of the local one
       const docs = convertFeedItems(newItems, source.url, source.name);
       let savedCount = 0;
       for (const doc of docs) {
-        // Check if item already exists
-        const existingDoc = convex.getDocument(doc.id);
-        if (!existingDoc) {
-          await convex.saveDocument(doc);
-        }
+        // Strip the local id and update feedId to Convex-generated one
+        const { id: _localId, ...docWithoutId } = doc;
+        const docWithConvexFeedId = {
+          ...docWithoutId,
+          article: {
+            ...docWithoutId.article,
+            feedId: feedId,  // Use Convex-generated feedId
+          },
+        };
+        await convex.saveDocument(docWithConvexFeedId as typeof doc);
         savedCount++;
         if (onProgress) {
           onProgress(savedCount);
@@ -192,9 +198,21 @@ export function useConvexStorageHook(): UseStorageReturn {
 
     let newCount = 0;
     for (const doc of docs) {
-      const existingDoc = convex.getDocument(doc.id);
+      // Check if item with this URL already exists (use URL as unique key)
+      const existingDoc = convex.documents.find(
+        (d) => d.type === 'article' && (d as ArticleDocument).article.url === doc.article.url
+      );
       if (!existingDoc) {
-        await convex.saveDocument(doc);
+        // Strip the local id and use Convex-generated feedId
+        const { id: _localId, ...docWithoutId } = doc;
+        const docWithConvexFeedId = {
+          ...docWithoutId,
+          article: {
+            ...docWithoutId.article,
+            feedId: feed.id,  // Use existing Convex feedId
+          },
+        };
+        await convex.saveDocument(docWithConvexFeedId as typeof doc);
         newCount++;
       }
     }
