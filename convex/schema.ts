@@ -132,7 +132,7 @@ const documentAssets = v.object({
   insights: v.optional(insightsData),
 });
 
-// Article properties
+// Article properties (also used for podcast episodes)
 const articleProperties = v.object({
   url: v.string(),
   feedId: v.string(),
@@ -147,6 +147,15 @@ const articleProperties = v.object({
   isStarred: v.boolean(),
   excerpt: v.optional(v.string()),
   mediaType: v.optional(v.union(v.literal("text"), v.literal("video"), v.literal("audio"))),
+  // Podcast-specific fields
+  audioUrl: v.optional(v.string()),
+  duration: v.optional(v.string()),  // Duration in seconds as string
+  transcriptionStatus: v.optional(v.union(
+    v.literal("none"),
+    v.literal("processing"),
+    v.literal("complete"),
+    v.literal("error")
+  )),
 });
 
 // Transcript properties
