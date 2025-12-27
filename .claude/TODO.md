@@ -10,9 +10,9 @@ When you have laptop access:
 - [ ] Add webhook endpoint: `https://<deployment>.convex.site/stripe-webhook`
 - [ ] Test checkout flow with test card `4242 4242 4242 4242`
 
-### UI Integration
-- [ ] Add `<PricingModal>` to app (accessible from settings or sidebar)
-- [ ] Add `<UsageSummary>` to sidebar for logged-in users
+### UI Integration (DONE)
+- [x] Add `<PricingModal>` to app (accessible from settings or sidebar)
+- [x] Add `<UsageSummary>` to sidebar for logged-in users
 - [ ] Wire up usage checks before `onTranscribe` calls in FeedList
 - [ ] Wire up usage checks before AI summary generation
 - [ ] Wire up usage checks before PDF OCR scanning
@@ -22,24 +22,64 @@ When you have laptop access:
 - `components/FeedList.tsx:84` - `handleTranscribe()` needs usage check
 - `components/ScanModal.tsx` - PDF scanning needs usage check
 - `lib/ai.ts` - Summary generation needs usage check
-- `components/Sidebar.tsx` - Add UsageSummary component
-- `App.tsx` - Add PricingModal state and component
 
 ---
 
-## Podcast Feed Issues
+## Podcast Feed Issues (FIXED)
 
-### Known Problems
-- [ ] Feedly search returns wrong feeds for podcasts with common names
-- [ ] No podcast-specific directory (iTunes, Podcast Index)
-- [ ] Some hosts (Megaphone, Omny, Acast) block CORS proxies
-- [ ] Duration parsing inconsistent ("01:23:45" vs "5045" seconds)
+- [x] Add iTunes Search API for podcast discovery
+- [x] Better error messages when feeds fail to load
+- [x] Normalize duration parsing in RSS parser
+- [ ] Add Podcast Index API as fallback (optional, iTunes is usually enough)
 
-### Planned Fixes
-- [ ] Add iTunes Search API for podcast discovery
-- [ ] Add Podcast Index API as fallback
-- [ ] Better error messages when feeds fail to load
-- [ ] Normalize duration parsing in RSS parser
+---
+
+## Boards Feature (Like Feedly, but Better)
+
+Design notes for boards/collections system:
+
+### Concept
+- **Folders** = organize feeds by topic (existing)
+- **Boards** = curated collections of saved articles/transcripts (new)
+
+### Key Differences from Folders
+- Boards contain individual items, not feeds
+- Same item can be in multiple boards
+- Boards are shareable/exportable
+- Designed for Notion/Obsidian sync
+
+### Schema Addition
+```typescript
+boards: defineTable({
+  userId: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  icon: v.optional(v.string()),  // emoji or lucide icon
+  color: v.optional(v.string()),
+  isPublic: v.boolean(),         // for sharing
+  sortOrder: v.number(),
+})
+
+boardItems: defineTable({
+  userId: v.string(),
+  boardId: v.string(),
+  documentId: v.string(),        // reference to documents table
+  addedAt: v.string(),
+  note: v.optional(v.string()),  // user annotation
+})
+```
+
+### Export Formats (for Notion/Obsidian)
+- Markdown files with frontmatter (YAML metadata)
+- JSON for API integrations
+- Obsidian vault structure (folders + wikilinks)
+- Notion database CSV
+
+### UI Considerations
+- "Save to Board" button on items (like Feedly)
+- Board view shows collected items
+- Drag-and-drop reordering
+- Quick add via keyboard shortcut (b?)
 
 ---
 
@@ -64,3 +104,5 @@ When you have laptop access:
 - [ ] Feed context prompt UI (contextPrompt field exists, needs UI)
 - [ ] Keyboard shortcuts help modal
 - [ ] PWA/offline support
+- [ ] Boards feature (see design above)
+- [ ] Notion/Obsidian export

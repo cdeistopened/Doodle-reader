@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
 import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles, Menu } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
+import { UsageSummary } from './UpgradePrompt';
 
 interface SidebarProps {
   folders: Folder[];
@@ -17,6 +18,8 @@ interface SidebarProps {
   documentCount?: number;
   isOpen?: boolean;
   onClose?: () => void;
+  onUpgrade?: () => void;
+  showUsage?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,6 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   documentCount = 0,
   isOpen = true,
   onClose,
+  onUpgrade,
+  showUsage = false,
 }) => {
   const [confirmUnsubscribe, setConfirmUnsubscribe] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState('');
@@ -328,6 +333,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </a>
           </div>
         </div>
+
+        {/* Usage Summary - show when authenticated */}
+        {showUsage && onUpgrade && (
+          <div className="p-3 border-t border-border">
+            <UsageSummary onUpgrade={onUpgrade} />
+          </div>
+        )}
 
         {/* Footer - hidden on mobile */}
         <div className="p-3 border-t border-border hidden md:block">

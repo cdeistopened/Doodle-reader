@@ -6,6 +6,7 @@ import { SubscribeModal } from './components/SubscribeModal';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
+import { PricingModal } from './components/PricingModal';
 import { ViewMode, FilterType, FeedItem, FeedSource } from './types';
 import { useStorage, useConvexStorageHook, useHybridStorage, useMobile } from './lib/hooks';
 import type { Folder } from './lib/storage';
@@ -80,6 +81,7 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isPricingOpen, setPricingOpen] = useState(false);
 
   const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
     setSubscribeError(null);
@@ -298,6 +300,8 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
         documentCount={documentCount}
         isOpen={isSidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onUpgrade={() => setPricingOpen(true)}
+        showUsage={true}
       />
 
       <div className="flex flex-col flex-grow h-full overflow-hidden relative">
@@ -394,6 +398,11 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
         onClose={() => setBulkTranscribeOpen(false)}
         items={filteredItems}
         feedTitle={filterId ? feeds.find(f => f.id === filterId)?.name : undefined}
+      />
+
+      <PricingModal
+        isOpen={isPricingOpen}
+        onClose={() => setPricingOpen(false)}
       />
     </div>
   );
