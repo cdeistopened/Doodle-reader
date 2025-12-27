@@ -88,9 +88,7 @@ export function convertFeedItem(
     modified: now,
     status: 'complete',
     content: item.content,
-    // DON'T set summary from snippet - summary is reserved for polished AI content only
-    // The snippet is already stored in article.excerpt
-    summary: item.aiSummary, // Only set if there's actual polished content
+    summary: item.snippet,
     tags: [],
     article: articleProps,
   };
@@ -119,13 +117,13 @@ export function toOldFeedItem(doc: ArticleDocument): FeedItem {
     title: doc.title,
     author: doc.article.author || '',
     authorUrl: doc.article.authorUrl,
-    snippet: doc.article.excerpt || '',  // Don't fall back to summary - that's for polished content
+    snippet: doc.article.excerpt || doc.summary || '',
     content: doc.content,
     url: doc.article.url,
     timestamp: new Date(doc.article.pubDate).getTime(),
     isRead: doc.article.isRead,
     isStarred: doc.article.isStarred,
-    aiSummary: doc.summary || undefined,  // Only set if there's actual polished content
+    aiSummary: doc.summary,
     mediaType,
     audioUrl: extendedProps.audioUrl,
     duration: extendedProps.duration,

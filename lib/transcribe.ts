@@ -25,6 +25,8 @@ export interface TranscriptionProgress {
 
 type ProgressCallback = (progress: TranscriptionProgress) => void;
 
+export type TranscriptionProvider = 'assemblyai' | 'gemini';
+
 /**
  * Format milliseconds to MM:SS timestamp
  */
@@ -93,7 +95,13 @@ export function setApiKey(key: string): void {
 /**
  * Check if API key is configured
  */
-export function hasApiKey(): boolean {
+export function hasApiKey(provider?: TranscriptionProvider): boolean {
+  // For now, only AssemblyAI is supported for transcription
+  // Gemini uses a different key path (VITE_GEMINI_API_KEY)
+  if (provider === 'gemini') {
+    // @ts-ignore - Vite env
+    return !!import.meta.env?.VITE_GEMINI_API_KEY;
+  }
   return !!getApiKey();
 }
 

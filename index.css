@@ -1,59 +1,66 @@
 /*
  * Doodle Reader - Design System
- * E-Ink inspired, neubrutalist accents, editorial typography
+ * Editorial typography, oceanic depth, warm terracotta accents
+ * Inspired by literary magazines and vintage book covers
  */
 
 /* ========================================
    FONTS
    ======================================== */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
 
-/* Kalise-like font: Using Crimson Pro as a beautiful humanist serif alternative
-   (Kalise is a commercial font - Crimson Pro is a free Google Font with similar feel) */
+/* Spectral: A refined serif with excellent readability
+   DM Sans: Modern, geometric sans with personality
+   Libre Baskerville: Classic book typography for polished content */
 
 /* ========================================
    CSS CUSTOM PROPERTIES
    ======================================== */
 :root {
-  /* Core palette */
-  --ink: #1a1a1a;
-  --ink-soft: #2d2d2d;
-  --ink-muted: #4a4a4a;
+  /* Core palette - deep, literary feel */
+  --ink: #1c1917;
+  --ink-soft: #292524;
+  --ink-muted: #57534e;
 
-  --cream: #fdfbf7;
-  --cream-warm: #f5f2eb;
-  --cream-dark: #e8e4db;
+  --cream: #faf9f7;
+  --cream-warm: #f5f3ef;
+  --cream-dark: #e7e5e0;
 
-  --accent: #6366f1;
-  --accent-muted: #818cf8;
-  --accent-soft: #c7d2fe;
+  /* Primary accent - deep oceanic teal */
+  --accent: #0d7377;
+  --accent-muted: #14919b;
+  --accent-soft: #d0f0f4;
+
+  /* Secondary accent - warm terracotta for highlights */
+  --accent-warm: #c2410c;
+  --accent-warm-soft: #fed7aa;
 
   --surface: #ffffff;
-  --surface-elevated: #fafafa;
-  --surface-sunken: #f5f5f1;
+  --surface-elevated: #fafaf9;
+  --surface-sunken: #f5f4f1;
 
-  --border: #e5e5e5;
-  --border-strong: #1a1a1a;
-  --border-muted: #f0f0f0;
+  --border: #e7e5e4;
+  --border-strong: #1c1917;
+  --border-muted: #f5f5f4;
 
   /* Functional */
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
+  --success: #15803d;
+  --warning: #b45309;
+  --error: #b91c1c;
+  --info: #0369a1;
 
-  /* Shadows */
-  --shadow-soft: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-medium: 0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.06);
-  --shadow-elevated: 0 10px 25px rgba(0,0,0,0.06), 0 5px 10px rgba(0,0,0,0.04);
+  /* Shadows - warmer, softer */
+  --shadow-soft: 0 1px 3px rgba(28,25,23,0.05), 0 1px 2px rgba(28,25,23,0.08);
+  --shadow-medium: 0 4px 8px rgba(28,25,23,0.06), 0 2px 4px rgba(28,25,23,0.08);
+  --shadow-elevated: 0 12px 28px rgba(28,25,23,0.08), 0 6px 12px rgba(28,25,23,0.05);
   --shadow-brutal: 4px 4px 0 0 var(--ink);
   --shadow-brutal-sm: 2px 2px 0 0 var(--ink);
 
   /* Typography */
-  --font-serif: 'Cormorant Garamond', Georgia, serif;
-  --font-prose: 'Crimson Pro', 'Georgia', serif;  /* For polished/transformed content */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --font-serif: 'Spectral', Georgia, serif;
+  --font-prose: 'Libre Baskerville', 'Georgia', serif;  /* For polished content */
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
 
   /* Spacing */
   --sidebar-width: 260px;
@@ -62,21 +69,28 @@
 
 /* Dark mode */
 .dark {
-  --ink: #f5f5f1;
-  --ink-soft: #e5e5e5;
-  --ink-muted: #a3a3a3;
+  --ink: #fafaf9;
+  --ink-soft: #e7e5e4;
+  --ink-muted: #a8a29e;
 
-  --cream: #0f0f0f;
-  --cream-warm: #1a1a1a;
-  --cream-dark: #252525;
+  --cream: #0c0a09;
+  --cream-warm: #1c1917;
+  --cream-dark: #292524;
 
-  --surface: #1a1a1a;
-  --surface-elevated: #252525;
-  --surface-sunken: #0f0f0f;
+  --accent: #2dd4bf;
+  --accent-muted: #5eead4;
+  --accent-soft: #134e4a;
 
-  --border: #333333;
-  --border-strong: #f5f5f1;
-  --border-muted: #252525;
+  --accent-warm: #fb923c;
+  --accent-warm-soft: #7c2d12;
+
+  --surface: #1c1917;
+  --surface-elevated: #292524;
+  --surface-sunken: #0c0a09;
+
+  --border: #44403c;
+  --border-strong: #fafaf9;
+  --border-muted: #292524;
 
   --shadow-brutal: 4px 4px 0 0 var(--ink);
 }
@@ -699,41 +713,48 @@ body {
 
 /* ========================================
    TYPOGRAPHY - POLISHED CONTENT
-   Uses Crimson Pro for a refined, humanist serif feel
+   Uses Libre Baskerville for classic book typography
    ======================================== */
 .prose-polished {
   font-family: var(--font-prose);
-  font-size: 1.125rem;
-  line-height: 1.85;
+  font-size: 1.0625rem;
+  line-height: 1.9;
   color: var(--ink);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
 }
 
 .prose-polished h1,
 .prose-polished h2,
 .prose-polished h3,
 .prose-polished h4 {
-  font-family: var(--font-prose);
+  font-family: var(--font-serif);
   font-weight: 600;
-  line-height: 1.35;
-  margin-top: 2rem;
+  line-height: 1.3;
+  margin-top: 2.5rem;
   margin-bottom: 1rem;
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
-.prose-polished h1 { font-size: 2rem; }
-.prose-polished h2 { font-size: 1.625rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.prose-polished h1 { font-size: 2.25rem; }
+.prose-polished h2 {
+  font-size: 1.625rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--accent);
+}
 .prose-polished h3 { font-size: 1.375rem; }
-.prose-polished h4 { font-size: 1.125rem; }
+.prose-polished h4 { font-size: 1.125rem; font-weight: 700; }
 
 .prose-polished p {
   margin-bottom: 1.5rem;
   text-indent: 0;
+  text-align: justify;
+  hyphens: auto;
 }
 
 .prose-polished p + p {
   text-indent: 1.5em;
+  margin-top: -0.5rem;
 }
 
 .prose-polished a {
@@ -741,65 +762,83 @@ body {
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
-  transition: color 0.15s;
+  text-decoration-color: var(--accent-soft);
+  transition: all 0.15s;
 }
 
 .prose-polished a:hover {
-  color: var(--accent-muted);
+  color: var(--accent-warm);
+  text-decoration-color: var(--accent-warm);
 }
 
 .prose-polished blockquote {
-  border-left: 3px solid var(--accent);
-  padding-left: 1.5rem;
-  margin: 1.5rem 0;
+  border-left: 4px solid var(--accent);
+  padding: 1.25rem 1.5rem;
+  margin: 2rem 0;
   font-style: italic;
   color: var(--ink-soft);
-  background-color: var(--cream-warm);
-  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--cream-warm) 0%, var(--surface) 100%);
   border-radius: 0 8px 8px 0;
+  position: relative;
+}
+
+.prose-polished blockquote::before {
+  content: '"';
+  font-family: var(--font-serif);
+  font-size: 4rem;
+  color: var(--accent-soft);
+  position: absolute;
+  top: -0.5rem;
+  left: 0.5rem;
+  line-height: 1;
 }
 
 .prose-polished code {
   font-family: var(--font-mono);
-  font-size: 0.875em;
-  background-color: var(--cream-warm);
-  padding: 0.2em 0.4em;
+  font-size: 0.85em;
+  background-color: var(--cream-dark);
+  padding: 0.2em 0.5em;
   border-radius: 4px;
+  border: 1px solid var(--border);
 }
 
 .prose-polished pre {
   font-family: var(--font-mono);
-  font-size: 0.875rem;
-  background-color: var(--cream-warm);
-  padding: 1.25rem 1.5rem;
+  font-size: 0.8125rem;
+  background-color: var(--ink);
+  color: var(--cream);
+  padding: 1.5rem;
   border-radius: 8px;
   overflow-x: auto;
-  margin: 1.5rem 0;
-  border: 1px solid var(--border);
+  margin: 2rem 0;
+  box-shadow: var(--shadow-medium);
 }
 
 .prose-polished pre code {
   background: none;
   padding: 0;
+  border: none;
+  color: inherit;
 }
 
 .prose-polished ul,
 .prose-polished ol {
-  padding-left: 1.75rem;
+  padding-left: 1.5rem;
   margin-bottom: 1.5rem;
 }
 
 .prose-polished li {
-  margin-bottom: 0.625rem;
-  line-height: 1.7;
+  margin-bottom: 0.75rem;
+  line-height: 1.75;
 }
 
 .prose-polished li::marker {
   color: var(--accent);
+  font-weight: 600;
 }
 
 .prose-polished strong {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -809,18 +848,20 @@ body {
 
 .prose-polished hr {
   border: none;
-  border-top: 1px solid var(--border);
-  margin: 2.5rem 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  margin: 3rem 0;
 }
 
-/* First paragraph gets a drop cap feel */
+/* First paragraph drop cap - editorial style */
 .prose-polished > p:first-of-type::first-letter {
-  font-size: 3em;
+  font-family: var(--font-serif);
+  font-size: 3.5em;
   float: left;
-  line-height: 0.8;
+  line-height: 0.85;
   margin-right: 0.1em;
-  margin-top: 0.1em;
-  font-weight: 500;
+  margin-top: 0.05em;
+  font-weight: 600;
   color: var(--accent);
 }
 

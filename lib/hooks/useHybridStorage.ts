@@ -14,9 +14,9 @@ import { useStorage } from './useStorage';
 import { useConvexStorageOptional } from '../storage/convex-provider';
 import { useAuth } from '@clerk/clerk-react';
 import { useCallback } from 'react';
-import type { TranscriptionProgress } from '../transcribe';
+import type { TranscriptionProgress, TranscriptionProvider } from '../transcribe';
 
-export type TranscriptionProvider = 'assemblyai' | 'gemini';
+export type { TranscriptionProvider };
 
 /**
  * Hybrid storage that uses local IndexedDB for feeds/browsing

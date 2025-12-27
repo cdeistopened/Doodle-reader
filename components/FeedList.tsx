@@ -5,7 +5,7 @@ import { getTranscript } from '../lib/youtube';
 import { TransformPanel } from './TransformPanel';
 import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
-import type { TranscriptionProvider } from '../lib/hooks/useStorage';
+import type { TranscriptionProvider } from '../lib/hooks/useHybridStorage';
 
 // Format duration (handles both raw seconds "2652" and formatted "44:12")
 function formatDuration(duration: string | undefined): string {
@@ -929,14 +929,14 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
         {/* Raw Transcript Toggle (for videos with fetched transcript or podcasts with transcription) */}
         {((isVideo && rawTranscript) || (isPodcast && hasTranscript)) && (
           <CollapsibleSection
-            title="Raw Transcript"
+            title="Transcript"
             icon={<PenTool size={14} strokeWidth={1.5} />}
             defaultOpen={showTranscript}
             badge={`${((isVideo ? rawTranscript : item.content) || '').length.toLocaleString()} chars`}
           >
-            <pre className="text-sm text-ink-muted whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
-              {isVideo ? rawTranscript : item.content}
-            </pre>
+            <div className="prose-polished max-h-96 overflow-y-auto">
+              <ReactMarkdown>{isVideo ? rawTranscript : item.content}</ReactMarkdown>
+            </div>
           </CollapsibleSection>
         )}
 

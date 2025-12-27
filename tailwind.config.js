@@ -8,65 +8,72 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Core palette - E-Ink / Paper inspired
+        // Core palette - literary, warm stone tones
         ink: {
-          DEFAULT: '#1a1a1a',
-          soft: '#2d2d2d',
-          muted: '#4a4a4a',
+          DEFAULT: '#1c1917',
+          soft: '#292524',
+          muted: '#57534e',
         },
         cream: {
-          DEFAULT: '#fdfbf7',
-          warm: '#f5f2eb',
-          dark: '#e8e4db',
+          DEFAULT: '#faf9f7',
+          warm: '#f5f3ef',
+          dark: '#e7e5e0',
         },
 
-        // Accent - muted, purposeful
+        // Primary accent - deep oceanic teal
         accent: {
-          DEFAULT: '#6366f1', // Indigo - for primary actions
-          muted: '#818cf8',
-          soft: '#c7d2fe',
+          DEFAULT: '#0d7377',
+          muted: '#14919b',
+          soft: '#d0f0f4',
+          warm: '#c2410c',       // Terracotta secondary
+          'warm-soft': '#fed7aa',
         },
+
+        // Alias for components using reader-active
+        'reader-active': '#0d7377',
 
         // Functional colors
         surface: {
           DEFAULT: '#ffffff',
-          elevated: '#fafafa',
-          sunken: '#f5f5f1',
+          elevated: '#fafaf9',
+          sunken: '#f5f4f1',
         },
 
-        // Status colors - muted, not alarming
+        // Status colors - earthy, sophisticated
         status: {
-          success: '#22c55e',
-          warning: '#f59e0b',
-          error: '#ef4444',
-          info: '#3b82f6',
+          success: '#15803d',
+          warning: '#b45309',
+          error: '#b91c1c',
+          info: '#0369a1',
         },
 
-        // Border - neubrutalist when needed
+        // Border - subtle warmth
         border: {
-          DEFAULT: '#e5e5e5',
-          strong: '#1a1a1a',
-          muted: '#f0f0f0',
+          DEFAULT: '#e7e5e4',
+          strong: '#1c1917',
+          muted: '#f5f5f4',
         },
 
         // Dark mode palette
         dark: {
-          bg: '#0f0f0f',
-          surface: '#1a1a1a',
-          elevated: '#252525',
-          border: '#333333',
-          text: '#f5f5f1',
-          muted: '#a3a3a3',
+          bg: '#0c0a09',
+          surface: '#1c1917',
+          elevated: '#292524',
+          border: '#44403c',
+          text: '#fafaf9',
+          muted: '#a8a29e',
         },
       },
 
       fontFamily: {
-        // Editorial serif for content
-        serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
-        // Clean sans for UI
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        // Monospace for code/technical
-        mono: ['"JetBrains Mono"', 'Consolas', 'monospace'],
+        // Editorial serif for headings
+        serif: ['Spectral', 'Georgia', 'serif'],
+        // Refined serif for long-form reading
+        prose: ['"Libre Baskerville"', 'Georgia', 'serif'],
+        // Modern geometric sans for UI
+        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        // Technical monospace
+        mono: ['"IBM Plex Mono"', 'Consolas', 'monospace'],
       },
 
       fontSize: {
