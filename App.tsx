@@ -116,14 +116,26 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
       result = items.filter(i => i.feedId === filterId);
     }
 
+    // Helper to parse duration string "HH:MM:SS" or "MM:SS" to seconds
+    const parseDuration = (dur?: string): number => {
+      if (!dur) return 0;
+      const parts = dur.split(':').map(Number);
+      if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else if (parts.length === 2) {
+        return parts[0] * 60 + parts[1];
+      }
+      return 0;
+    };
+
     const sorted = [...result].sort((a, b) => {
       switch (sortOrder) {
         case 'oldest':
           return a.timestamp - b.timestamp;
         case 'longest':
-          return (b.content?.length || 0) - (a.content?.length || 0);
+          return parseDuration(b.duration) - parseDuration(a.duration);
         case 'shortest':
-          return (a.content?.length || 0) - (b.content?.length || 0);
+          return parseDuration(a.duration) - parseDuration(b.duration);
         case 'newest':
         default:
           return b.timestamp - a.timestamp;
