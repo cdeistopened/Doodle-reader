@@ -11,29 +11,51 @@ const PROXY_STRATEGIES = [
 ];
 
 /**
- * Robust fetcher that tries multiple proxies and handles text/json responses
+ * Robust fetcher that tries multiple proxies and handles text/json responses.
+ * Provides detailed error information for debugging feed issues.
  */
 export async function fetchRawContent(targetUrl: string): Promise<string> {
-  let lastError;
+  const errors: { proxy: string; error: string }[] = [];
 
-  for (const strategy of PROXY_STRATEGIES) {
+  for (let i = 0; i < PROXY_STRATEGIES.length; i++) {
+    const strategy = PROXY_STRATEGIES[i];
+    const proxyName = i === 0 ? 'server' : i === 1 ? 'corsproxy.io' : 'allorigins';
+
     try {
       const proxyUrl = strategy(targetUrl);
-      const response = await fetch(proxyUrl);
-      
+      const response = await fetch(proxyUrl, {
+        signal: AbortSignal.timeout(15000), // 15 second timeout
+      });
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const statusText = response.statusText || 'Unknown error';
+        throw new Error(`HTTP ${response.status}: ${statusText}`);
       }
-      
-      return await response.text();
-    } catch (e) {
-      console.warn(`Proxy strategy failed for ${targetUrl}:`, e);
-      lastError = e;
+
+      const text = await response.text();
+
+      // Check for empty responses
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response received');
+      }
+
+      // Check for HTML error pages (some proxies return these)
+      if (text.includes('<!DOCTYPE html>') && text.includes('error')) {
+        throw new Error('Proxy returned an error page');
+      }
+
+      return text;
+    } catch (e: any) {
+      const errorMsg = e.name === 'TimeoutError' ? 'Request timed out (15s)' : e.message;
+      console.warn(`[RSS] Proxy ${proxyName} failed for ${targetUrl}:`, errorMsg);
+      errors.push({ proxy: proxyName, error: errorMsg });
       // Continue to next strategy
     }
   }
-  
-  throw new Error(`All proxy attempts failed. Last error: ${lastError}`);
+
+  // Build informative error message
+  const errorDetails = errors.map(e => `${e.proxy}: ${e.error}`).join('; ');
+  throw new Error(`Failed to fetch feed. The feed URL may be invalid, blocked, or temporarily unavailable. (${errorDetails})`);
 }
 
 /**
@@ -84,6 +106,11 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
   let url = inputUrl.trim();
   let content = '';
 
+  // Validate URL format
+  if (!url) {
+    throw new Error('Please enter a feed URL or search term');
+  }
+
   // 1. Heuristic: If input looks like a search term (no dots or slashes), search immediately
   if (!url.includes('.') || !url.includes('/')) {
     console.log(`[RSS] Input '${url}' looks like a search term. Querying directory...`);
@@ -91,8 +118,13 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
     if (found) {
       url = found;
     } else {
-      throw new Error(`Could not find a feed for "${inputUrl}"`);
+      throw new Error(`Could not find a feed for "${inputUrl}". Try searching by podcast/site name or paste the RSS URL directly.`);
     }
+  }
+
+  // Normalize URL
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
   }
 
   // 2. Try fetching the content
@@ -263,7 +295,9 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
     }
 
     // Get duration from iTunes namespace or regular duration tag
-    duration = getTagValue(node, 'itunes:duration') || getTagValue(node, 'duration');
+    // Normalize to seconds for consistent sorting
+    const rawDuration = getTagValue(node, 'itunes:duration') || getTagValue(node, 'duration');
+    duration = normalizeDuration(rawDuration);
 
     // Determine media type
     let mediaType: 'text' | 'video' | 'audio' = 'text';
@@ -292,6 +326,54 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
 };
 
 // --- Helpers ---
+
+/**
+ * Normalize duration to seconds (as string).
+ * Handles multiple formats:
+ * - "01:23:45" (HH:MM:SS) -> "5025"
+ * - "23:45" (MM:SS) -> "1425"
+ * - "5025" (already seconds) -> "5025"
+ * - "1h 23m 45s" -> "5025"
+ */
+const normalizeDuration = (duration: string | undefined): string | undefined => {
+  if (!duration) return undefined;
+
+  const trimmed = duration.trim();
+
+  // Already in seconds format
+  if (/^\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // HH:MM:SS or MM:SS format
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').map(p => parseInt(p, 10) || 0);
+    if (parts.length === 3) {
+      // HH:MM:SS
+      const [hours, mins, secs] = parts;
+      return String(hours * 3600 + mins * 60 + secs);
+    } else if (parts.length === 2) {
+      // MM:SS
+      const [mins, secs] = parts;
+      return String(mins * 60 + secs);
+    }
+  }
+
+  // Human-readable format: "1h 23m 45s" or "1 hour 23 minutes"
+  const hourMatch = trimmed.match(/(\d+)\s*h/i);
+  const minMatch = trimmed.match(/(\d+)\s*m/i);
+  const secMatch = trimmed.match(/(\d+)\s*s/i);
+
+  if (hourMatch || minMatch || secMatch) {
+    const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    const mins = minMatch ? parseInt(minMatch[1], 10) : 0;
+    const secs = secMatch ? parseInt(secMatch[1], 10) : 0;
+    return String(hours * 3600 + mins * 60 + secs);
+  }
+
+  // Return as-is if we can't parse
+  return trimmed;
+};
 
 const getTagValue = (node: Element, tagName: string): string => {
   const els = node.getElementsByTagName(tagName);
