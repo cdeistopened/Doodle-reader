@@ -5,10 +5,14 @@ import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
+import { PhotoScanModal } from './components/PhotoScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
+import { PricingModal } from './components/PricingModal';
+import { BoardView } from './components/BoardView';
 import { ViewMode, FilterType, FeedItem, FeedSource } from './types';
 import { useStorage, useConvexStorageHook, useHybridStorage, useMobile } from './lib/hooks';
 import type { Folder } from './lib/storage';
+import { Id } from './convex/_generated/dataModel';
 
 export type StorageMode = 'local' | 'convex' | 'hybrid';
 
@@ -38,11 +42,16 @@ interface StorageHookReturn {
   importVideo: (url: string) => Promise<void>;
 }
 
+interface AppContentProps {
+  storage: StorageHookReturn;
+  enableBoards?: boolean;
+}
+
 /**
  * Main app content - receives storage operations as props.
  * This component contains all the UI logic and is storage-agnostic.
  */
-function AppContent({ storage }: { storage: StorageHookReturn }) {
+function AppContent({ storage, enableBoards = false }: AppContentProps) {
   const {
     items,
     feeds,
@@ -78,8 +87,11 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
   const [isScanOpen, setScanOpen] = useState(false);
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
+  const [isPhotoScanOpen, setPhotoScanOpen] = useState(false);
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isPricingOpen, setPricingOpen] = useState(false);
+  const [activeBoard, setActiveBoard] = useState<Id<"boards"> | null>(null);
 
   const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
     setSubscribeError(null);
@@ -262,6 +274,19 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
     if (viewMode === ViewMode.Detail) setViewMode(ViewMode.List);
   }, [filterType, filterId]);
 
+  // Handle board selection
+  const handleSelectBoard = useCallback((boardId: Id<"boards">) => {
+    setActiveBoard(boardId);
+    // Clear feed filter when viewing a board
+    setFilterType('all');
+    setFilterId(null);
+  }, []);
+
+  // Handle going back from board view
+  const handleBackFromBoard = useCallback(() => {
+    setActiveBoard(null);
+  }, []);
+
   const isPodcastFeed = useMemo(() => {
     if (filterType !== 'feed' || !filterId) return false;
     return filteredItems.some(item => item.mediaType === 'audio' && item.audioUrl);
@@ -287,6 +312,7 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
         activeFilter={filterType}
         activeId={filterId}
         onNavigate={(type, id) => {
+          setActiveBoard(null); // Clear board when navigating
           setFilterType(type);
           if (id) setFilterId(id);
           else setFilterId(null);
@@ -295,9 +321,14 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
         onUnsubscribe={(feedId) => unsubscribe(feedId, true)}
         onScanPdf={() => setScanOpen(true)}
         onFolderScan={() => setFolderScanOpen(true)}
+        onPhotoScan={() => setPhotoScanOpen(true)}
         documentCount={documentCount}
         isOpen={isSidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onUpgrade={() => setPricingOpen(true)}
+        showUsage={true}
+        activeBoard={activeBoard}
+        onSelectBoard={enableBoards ? handleSelectBoard : undefined}
       />
 
       <div className="flex flex-col flex-grow h-full overflow-hidden relative">
@@ -324,7 +355,13 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
           </div>
         )}
 
-        {loading ? (
+        {/* Board View - when a board is selected */}
+        {activeBoard ? (
+          <BoardView
+            boardId={activeBoard}
+            onBack={handleBackFromBoard}
+          />
+        ) : loading ? (
           <div className="flex-grow flex items-center justify-center text-gray-500">
             <div className="flex flex-col items-center">
               <div className="w-8 h-8 border-4 border-reader-active border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -389,11 +426,22 @@ function AppContent({ storage }: { storage: StorageHookReturn }) {
         onScanComplete={handleBatchScanComplete}
       />
 
+      <PhotoScanModal
+        isOpen={isPhotoScanOpen}
+        onClose={() => setPhotoScanOpen(false)}
+        onScanComplete={saveScannedDocument}
+      />
+
       <BulkTranscribeModal
         isOpen={isBulkTranscribeOpen}
         onClose={() => setBulkTranscribeOpen(false)}
         items={filteredItems}
         feedTitle={filterId ? feeds.find(f => f.id === filterId)?.name : undefined}
+      />
+
+      <PricingModal
+        isOpen={isPricingOpen}
+        onClose={() => setPricingOpen(false)}
       />
     </div>
   );
@@ -414,7 +462,8 @@ function LocalApp() {
  */
 function HybridApp() {
   const storage = useHybridStorage();
-  return <AppContent storage={storage} />;
+  // Enable boards in hybrid mode (requires Convex + auth)
+  return <AppContent storage={storage} enableBoards={true} />;
 }
 
 /**

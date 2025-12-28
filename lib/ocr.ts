@@ -638,3 +638,281 @@ Output clean, readable Markdown.`;
 
   return prompt;
 }
+
+// =============================================================================
+// IMAGE OCR - Process photos/images using Gemini Vision
+// =============================================================================
+
+const IMAGE_OCR_PROMPT = `Extract and convert all text from this image to clean Markdown.
+
+## Instructions:
+- Preserve ALL text exactly as it appears
+- Auto-detect and handle: tables, handwriting, printed text, multi-column layouts
+- Convert tables to Markdown format with | separators
+- Use proper heading levels if document structure is visible
+- Preserve paragraph structure and document flow
+- For diagrams/charts: describe briefly as [Image: description]
+- Do NOT wrap output in code blocks
+- Do NOT add commentary, just the extracted text
+
+If the image contains handwritten notes, do your best to transcribe accurately.
+Output clean, readable Markdown.`;
+
+const IMAGE_OCR_MULTI_PROMPT = (imageNum: number, totalImages: number) => `Extract and convert all text from this image to clean Markdown.
+
+This is image ${imageNum} of ${totalImages} from a multi-page document.
+${imageNum > 1 ? 'Continue from where the previous page ended.\n' : ''}
+
+## Instructions:
+- Preserve ALL text exactly as it appears
+- Auto-detect and handle: tables, handwriting, printed text, multi-column layouts
+- Convert tables to Markdown format with | separators
+- Use proper heading levels if document structure is visible
+- Preserve paragraph structure and document flow
+- For diagrams/charts: describe briefly as [Image: description]
+- Do NOT wrap output in code blocks
+- Do NOT add commentary, just the extracted text
+
+If the image contains handwritten notes, do your best to transcribe accurately.
+Output clean, readable Markdown.`;
+
+export interface ImageOCRResult {
+  content: string;
+  imageCount: number;
+  processingTimeMs: number;
+}
+
+export interface ImageOCRProgress {
+  status: 'reading' | 'processing' | 'completed' | 'error';
+  message: string;
+  currentImage?: number;
+  totalImages?: number;
+}
+
+type ImageProgressCallback = (progress: ImageOCRProgress) => void;
+
+/**
+ * Call Gemini API for image OCR
+ */
+async function callGeminiImageOCR(
+  apiKey: string,
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+  maxRetries: number = 3
+): Promise<string> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: imageBase64,
+                    },
+                  },
+                  { text: prompt },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: MAX_OUTPUT_TOKENS,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        const errorMsg = err.error?.message || `Gemini API Error: ${response.status}`;
+
+        if (response.status >= 500 || response.status === 429) {
+          console.warn(`[Image OCR] Attempt ${attempt}/${maxRetries} failed: ${errorMsg}`);
+          lastError = new Error(errorMsg);
+
+          if (attempt < maxRetries) {
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`[Image OCR] Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error('No content returned from Gemini');
+      }
+
+      return cleanLLMOutput(text);
+    } catch (error: any) {
+      lastError = error;
+
+      if (attempt < maxRetries && (error.message?.includes('fetch') || error.message?.includes('500'))) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[Image OCR] Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+        console.log(`[Image OCR] Retrying in ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError || new Error('All retry attempts failed');
+}
+
+/**
+ * Convert File to base64 string
+ */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Get MIME type from file
+ */
+function getImageMimeType(file: File): string {
+  // Common image types supported by Gemini
+  const mimeMap: Record<string, string> = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'heic': 'image/heic',
+    'heif': 'image/heif',
+  };
+
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  return mimeMap[ext] || file.type || 'image/jpeg';
+}
+
+/**
+ * Process a single image file and convert to Markdown using Gemini OCR
+ */
+export async function processImage(
+  file: File,
+  onProgress?: ImageProgressCallback
+): Promise<ImageOCRResult> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env');
+  }
+
+  const startTime = Date.now();
+
+  const report = (status: ImageOCRProgress['status'], message: string, extra: Partial<ImageOCRProgress> = {}) => {
+    onProgress?.({ status, message, ...extra });
+  };
+
+  report('reading', 'Reading image...');
+
+  const imageBase64 = await fileToBase64(file);
+  const mimeType = getImageMimeType(file);
+
+  report('processing', 'Processing image with Gemini...', { currentImage: 1, totalImages: 1 });
+
+  const content = await callGeminiImageOCR(apiKey, imageBase64, mimeType, IMAGE_OCR_PROMPT);
+
+  const processingTimeMs = Date.now() - startTime;
+
+  report('completed', 'Image processing complete!');
+
+  return {
+    content,
+    imageCount: 1,
+    processingTimeMs,
+  };
+}
+
+/**
+ * Process multiple image files and convert to Markdown using Gemini OCR
+ * Images are processed sequentially and combined into a single document
+ */
+export async function processImages(
+  files: File[],
+  onProgress?: ImageProgressCallback
+): Promise<ImageOCRResult> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env');
+  }
+
+  if (files.length === 0) {
+    throw new Error('No images provided');
+  }
+
+  // Single image - use simple processing
+  if (files.length === 1) {
+    return processImage(files[0], onProgress);
+  }
+
+  const startTime = Date.now();
+  const results: string[] = [];
+
+  const report = (status: ImageOCRProgress['status'], message: string, extra: Partial<ImageOCRProgress> = {}) => {
+    onProgress?.({ status, message, ...extra });
+  };
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const imageNum = i + 1;
+
+    report('reading', `Reading image ${imageNum}/${files.length}...`, {
+      currentImage: imageNum,
+      totalImages: files.length,
+    });
+
+    const imageBase64 = await fileToBase64(file);
+    const mimeType = getImageMimeType(file);
+
+    report('processing', `Processing image ${imageNum}/${files.length}...`, {
+      currentImage: imageNum,
+      totalImages: files.length,
+    });
+
+    const prompt = IMAGE_OCR_MULTI_PROMPT(imageNum, files.length);
+    const content = await callGeminiImageOCR(apiKey, imageBase64, mimeType, prompt);
+
+    results.push(content);
+  }
+
+  const processingTimeMs = Date.now() - startTime;
+
+  // Combine results with page separators
+  const combinedContent = results.join('\n\n---\n\n');
+
+  report('completed', `Processed ${files.length} images successfully!`);
+
+  return {
+    content: combinedContent,
+    imageCount: files.length,
+    processingTimeMs,
+  };
+}

@@ -1,7 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles, Menu } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, Search, Sparkles, Menu } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
+import { UsageSummary } from './UpgradePrompt';
+import { BoardsPanel } from './BoardsPanel';
+import { Id } from '../convex/_generated/dataModel';
+import { AuthButton } from './AuthButton';
 
 interface SidebarProps {
   folders: Folder[];
@@ -14,9 +18,15 @@ interface SidebarProps {
   onUnsubscribe?: (feedId: string) => void;
   onScanPdf?: () => void;
   onFolderScan?: () => void;
+  onPhotoScan?: () => void;
   documentCount?: number;
   isOpen?: boolean;
   onClose?: () => void;
+  onUpgrade?: () => void;
+  showUsage?: boolean;
+  // Boards
+  activeBoard?: Id<"boards"> | null;
+  onSelectBoard?: (boardId: Id<"boards">) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -30,9 +40,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUnsubscribe,
   onScanPdf,
   onFolderScan,
+  onPhotoScan,
   documentCount = 0,
   isOpen = true,
   onClose,
+  onUpgrade,
+  showUsage = false,
+  activeBoard,
+  onSelectBoard,
 }) => {
   const [confirmUnsubscribe, setConfirmUnsubscribe] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState('');
@@ -139,6 +154,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleFolderScan = () => {
     onFolderScan?.();
+    onClose?.();
+  };
+
+  const handlePhotoScan = () => {
+    onPhotoScan?.();
     onClose?.();
   };
 
@@ -252,6 +272,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleNavigate('folder', 'documents')}
           />
 
+          {/* Boards Section */}
+          {onSelectBoard && (
+            <div className="mt-4 pt-4 border-t border-border mx-3">
+              <BoardsPanel
+                activeBoard={activeBoard ?? null}
+                onSelectBoard={(boardId) => {
+                  onSelectBoard(boardId);
+                  onClose?.(); // Close sidebar on mobile
+                }}
+              />
+            </div>
+          )}
+
           {/* Feeds Section */}
           <div className="mt-4 pt-4 border-t border-border mx-3">
             <div className="px-1 pb-2 flex items-center justify-between">
@@ -309,23 +342,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Utilities Section */}
-          <div className="mt-4 pt-4 border-t border-border mx-3">
-            <div className="px-1 pb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
-            </div>
-
-            <a
-              href="http://localhost:5001"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink min-h-[44px] md:min-h-0"
-            >
-              <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
-                <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
+          {onPhotoScan && (
+            <div className="mt-4 pt-4 border-t border-border mx-3">
+              <div className="px-1 pb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
               </div>
-              <span className="flex-grow truncate text-sm">Page Snap</span>
-              <ExternalLink size={12} className="text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
-            </a>
+
+              <button
+                onClick={handlePhotoScan}
+                className="w-full flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink min-h-[44px] md:min-h-0"
+              >
+                <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
+                  <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
+                </div>
+                <span className="flex-grow truncate text-sm text-left">Photo Scan</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Usage Summary - show when authenticated */}
+        {showUsage && onUpgrade && (
+          <div className="p-3 border-t border-border">
+            <UsageSummary onUpgrade={onUpgrade} />
+          </div>
+        )}
+
+        {/* Account Section - visible on mobile, AuthButton shows only when Clerk configured */}
+        <div className="md:hidden p-3 border-t border-border">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink-muted">Account</span>
+            <AuthButton hideBorder />
           </div>
         </div>
 

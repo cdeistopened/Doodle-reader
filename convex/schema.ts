@@ -305,4 +305,123 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_order", ["userId", "sortOrder"]),
+
+  // ---------------------------------------------------------------------------
+  // SUBSCRIPTIONS (Stripe Integration)
+  // ---------------------------------------------------------------------------
+  subscriptions: defineTable({
+    // Multi-tenant
+    userId: v.string(),
+
+    // Stripe IDs
+    stripeCustomerId: v.string(),
+    stripeSubscriptionId: v.optional(v.string()),
+    stripePriceId: v.optional(v.string()),
+
+    // Subscription status
+    status: v.union(
+      v.literal("free"),
+      v.literal("trialing"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("unpaid")
+    ),
+
+    // Plan details
+    plan: v.union(
+      v.literal("free"),
+      v.literal("pro"),
+      v.literal("team")
+    ),
+
+    // Billing period
+    currentPeriodStart: v.optional(v.string()),
+    currentPeriodEnd: v.optional(v.string()),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+
+    // Timestamps
+    created: v.string(),
+    updated: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stripe_customer", ["stripeCustomerId"])
+    .index("by_stripe_subscription", ["stripeSubscriptionId"]),
+
+  // ---------------------------------------------------------------------------
+  // USAGE TRACKING
+  // ---------------------------------------------------------------------------
+  usage: defineTable({
+    // Multi-tenant
+    userId: v.string(),
+
+    // Billing period (YYYY-MM format for monthly tracking)
+    period: v.string(),
+
+    // Usage metrics
+    transcriptionMinutes: v.number(),
+    summariesGenerated: v.number(),
+    pdfPagesScanned: v.number(),
+
+    // Timestamps
+    updated: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_period", ["userId", "period"]),
+
+  // ---------------------------------------------------------------------------
+  // BOARDS (Curated Collections)
+  // ---------------------------------------------------------------------------
+  boards: defineTable({
+    // Multi-tenant
+    userId: v.string(),
+
+    // Identity
+    name: v.string(),
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()),  // emoji or lucide icon name
+    color: v.optional(v.string()),
+
+    // Visibility
+    isPublic: v.boolean(),
+    shareSlug: v.optional(v.string()),  // URL-friendly slug for sharing
+
+    // Organization
+    sortOrder: v.number(),
+
+    // Stats (denormalized for performance)
+    itemCount: v.number(),
+
+    // Timestamps
+    created: v.string(),
+    updated: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_order", ["userId", "sortOrder"])
+    .index("by_share_slug", ["shareSlug"]),
+
+  // ---------------------------------------------------------------------------
+  // BOARD ITEMS (Many-to-Many: Documents ↔ Boards)
+  // ---------------------------------------------------------------------------
+  boardItems: defineTable({
+    // Multi-tenant
+    userId: v.string(),
+
+    // References
+    boardId: v.id("boards"),
+    documentId: v.id("documents"),
+
+    // User annotation
+    note: v.optional(v.string()),
+
+    // Position within board
+    sortOrder: v.number(),
+
+    // Timestamps
+    addedAt: v.string(),
+  })
+    .index("by_board", ["boardId"])
+    .index("by_board_order", ["boardId", "sortOrder"])
+    .index("by_document", ["documentId"])
+    .index("by_user", ["userId"]),
 });
