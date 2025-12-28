@@ -439,3 +439,201 @@ Separate domain, shared data with Reader:
 - Audiogram/video clip creation
 
 **Not in Reader** - different cognitive mode, would slow down triage flow.
+
+---
+
+## Typography Strategy
+
+### Current State (Keep)
+
+Beautiful editorial system already in place:
+- **Spectral** - refined serif for content
+- **Libre Baskerville** - classic book typography for polished content
+- **DM Sans** - modern geometric sans for UI
+- **IBM Plex Mono** - code
+
+Features: drop caps, text indent, justified text, decorative blockquotes, gradient HRs
+
+### The Hybrid Philosophy
+
+| Context | Typography | Density | Class |
+|---------|------------|---------|-------|
+| List/Triage | DM Sans, tight | Dense (GReader style) | existing |
+| Article Reading | Spectral/Libre Baskerville | Beautiful (current) | `.prose-polished` |
+| Transcripts | Spectral, simpler | Middle ground | `.prose-transcript` (new) |
+
+### Proposed: `.prose-transcript`
+
+Transcripts need different treatment than articles:
+- NO drop caps (doesn't make sense for dialogue)
+- NO justified text (fights speaker format)
+- NO text indent (breaks flow)
+- YES speaker labels (prominent)
+- YES timestamps (functional margin)
+- YES section headers (AI-generated)
+
+```css
+/* ========================================
+   TYPOGRAPHY - TRANSCRIPTS
+   Optimized for podcast/video transcripts
+   ======================================== */
+.prose-transcript {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--ink);
+  max-width: 600px;  /* Narrower for readability */
+}
+
+.prose-transcript p {
+  margin-bottom: 1rem;
+  text-align: left;  /* NOT justified */
+}
+
+/* Speaker labels */
+.prose-transcript .speaker {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+/* Timestamp markers */
+.prose-transcript .timestamp {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  margin-right: 0.5rem;
+}
+
+/* AI-generated section headers */
+.prose-transcript .section-header {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--accent);
+}
+
+/* Key quote callouts */
+.prose-transcript .key-quote {
+  background: var(--cream-warm);
+  border-left: 3px solid var(--accent-warm);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+}
+
+/* Summary card at top */
+.transcript-summary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.transcript-summary h4 {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  margin-bottom: 0.5rem;
+}
+
+.transcript-summary ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.transcript-summary li {
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+}
+```
+
+### Layout: Transcript with Functional Margins
+
+```
+┌──────────────────────────────────────────────────────┐
+│ ┌──────────────────────────────────────────────────┐ │
+│ │ 📝 Key Points                                    │ │
+│ │ • AI moving faster than expected                │ │
+│ │ • Enterprise adoption accelerating              │ │
+│ └──────────────────────────────────────────────────┘ │
+│                                                      │
+│  [0:00]    ## The AI Landscape Today                │
+│                                                      │
+│  HOST      So today we're going to talk about AI.   │
+│            There's been a lot of development.       │
+│                                                      │
+│  [2:15]    SARAH                                    │
+│   ★        I was talking to someone who said the    │
+│            technology is moving faster than expected│
+│                                                      │
+│  [4:30]    ## Enterprise Adoption                   │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+     ↑              ↑
+  Timestamps     Narrower text (50-60 char)
+  + stars        Left-aligned, not justified
+```
+
+### Density Mode Toggle (Future)
+
+For power users who want Google Reader density in list view:
+
+```css
+/* Compact density mode */
+.density-compact .list-item {
+  padding: 0.25rem 0.75rem;  /* Tighter than current 0.75rem 1rem */
+}
+
+.density-compact .list-item-title {
+  font-size: 0.875rem;  /* Slightly smaller */
+}
+
+.density-compact .list-item-meta {
+  font-size: 0.75rem;
+}
+```
+
+Toggle in settings: "Comfortable" (default) vs "Compact"
+
+---
+
+## Audit Checklist
+
+Before implementing, audit current app against these:
+
+### Color Semantics
+- [ ] Star icon: Is it gold when active? (should be `#FFC000` or `--warning`)
+- [ ] Links: Distinct from body text? (current: `--accent` teal)
+- [ ] Unread/Read: Strong enough contrast?
+- [ ] Selection highlight: Visible but not harsh?
+
+### List View Density
+- [ ] Current row height vs target 26-28px?
+- [ ] Current padding vs target 2px 5px?
+- [ ] Snippet visible without expanding?
+
+### Sidebar
+- [ ] Favicons present and prominent?
+- [ ] Unread counts bold?
+- [ ] Folder/feed hierarchy clear?
+
+### Transcript-Specific
+- [ ] Speaker labels clear?
+- [ ] Timestamps accessible but not intrusive?
+- [ ] Section breaks from AI polish?
+- [ ] Key quotes highlighted?
