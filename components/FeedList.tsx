@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FeedItem, ViewMode, FeedSource } from '../types';
-import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X, Zap } from 'lucide-react';
+import { Star, ExternalLink, Loader2, Share2, CheckCircle2, Download, Youtube, ArrowLeft, ChevronLeft, ChevronRight, FileText, PenTool, Clock, Check, Key, Mic, ChevronDown, ChevronUp, Edit3, Copy, Sparkles, X, Zap, Bookmark } from 'lucide-react';
 import { getTranscript } from '../lib/youtube';
 import { TransformPanel } from './TransformPanel';
 import ReactMarkdown from 'react-markdown';
 import type { TranscriptionProgress } from '../lib/transcribe';
 import type { TranscriptionProvider } from '../lib/hooks/useHybridStorage';
+import { SaveToBoardModal } from './SaveToBoardModal';
+import { Id } from '../convex/_generated/dataModel';
 
 // Format duration (handles both raw seconds "2652" and formatted "44:12")
 function formatDuration(duration: string | undefined): string {
@@ -44,6 +46,9 @@ interface FeedListProps {
   hasTranscriptionKey?: (provider?: TranscriptionProvider) => boolean;
   setTranscriptionKey?: (key: string) => void;
   onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
+  // Boards
+  getDocumentId?: (itemId: string) => Id<"documents"> | null;
+  showBoards?: boolean;
 }
 
 export const FeedList: React.FC<FeedListProps> = ({
@@ -62,12 +67,15 @@ export const FeedList: React.FC<FeedListProps> = ({
   hasTranscriptionKey,
   setTranscriptionKey,
   onUpdateSummary,
+  getDocumentId,
+  showBoards = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [saveToBoardItemId, setSaveToBoardItemId] = useState<string | null>(null);
   
   // Transcription provider - default to Gemini (faster, cheaper, better speaker ID)
   const [transcriptionProvider, setTranscriptionProvider] = useState<TranscriptionProvider>(() => {
@@ -249,6 +257,15 @@ export const FeedList: React.FC<FeedListProps> = ({
                       className={item.isStarred ? 'fill-status-warning text-status-warning' : 'text-ink-muted hover:text-ink'}
                     />
                   </button>
+                  {showBoards && getDocumentId && (
+                    <button
+                      onClick={() => setSaveToBoardItemId(item.id)}
+                      className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md transition-colors"
+                      title="Save to Board"
+                    >
+                      <Bookmark size={20} strokeWidth={1.5} className="text-ink-muted hover:text-ink" />
+                    </button>
+                  )}
                   <button className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-cream-warm rounded-md transition-colors">
                     <Share2 size={20} strokeWidth={1.5} className="text-ink-muted hover:text-ink" />
                   </button>
@@ -458,6 +475,18 @@ export const FeedList: React.FC<FeedListProps> = ({
                   {transcribingId === item.id ? transcribeProgress : 'Processing...'}
                 </span>
               )}
+              {showBoards && getDocumentId && (
+                <button
+                  className="p-1.5 hover:bg-accent-soft rounded text-ink-muted hover:text-accent"
+                  title="Save to Board"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSaveToBoardItemId(item.id);
+                  }}
+                >
+                  <Bookmark size={14} strokeWidth={1.5} />
+                </button>
+              )}
               <button className="p-1.5 hover:bg-cream-dark rounded text-ink-muted" title="Archive">
                 <CheckCircle2 size={14} strokeWidth={1.5} />
               </button>
@@ -521,6 +550,21 @@ export const FeedList: React.FC<FeedListProps> = ({
           </div>
         </div>
       )}
+
+      {/* Save to Board Modal */}
+      {saveToBoardItemId && getDocumentId && (() => {
+        const item = items.find(i => i.id === saveToBoardItemId);
+        const docId = getDocumentId(saveToBoardItemId);
+        if (!docId) return null;
+        return (
+          <SaveToBoardModal
+            documentId={docId}
+            documentTitle={item?.title}
+            isOpen={!!saveToBoardItemId}
+            onClose={() => setSaveToBoardItemId(null)}
+          />
+        );
+      })()}
     </div>
   );
 };

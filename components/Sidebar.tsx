@@ -3,6 +3,9 @@ import { Folder, FeedSource, FilterType, FeedItem } from '../types';
 import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, ExternalLink, Search, Sparkles, Menu } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 import { UsageSummary } from './UpgradePrompt';
+import { BoardsPanel } from './BoardsPanel';
+import { Id } from '../convex/_generated/dataModel';
+import { AuthButton } from './AuthButton';
 
 interface SidebarProps {
   folders: Folder[];
@@ -20,6 +23,9 @@ interface SidebarProps {
   onClose?: () => void;
   onUpgrade?: () => void;
   showUsage?: boolean;
+  // Boards
+  activeBoard?: Id<"boards"> | null;
+  onSelectBoard?: (boardId: Id<"boards">) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   onUpgrade,
   showUsage = false,
+  activeBoard,
+  onSelectBoard,
 }) => {
   const [confirmUnsubscribe, setConfirmUnsubscribe] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState('');
@@ -257,6 +265,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleNavigate('folder', 'documents')}
           />
 
+          {/* Boards Section */}
+          {onSelectBoard && (
+            <div className="mt-4 pt-4 border-t border-border mx-3">
+              <BoardsPanel
+                activeBoard={activeBoard ?? null}
+                onSelectBoard={(boardId) => {
+                  onSelectBoard(boardId);
+                  onClose?.(); // Close sidebar on mobile
+                }}
+              />
+            </div>
+          )}
+
           {/* Feeds Section */}
           <div className="mt-4 pt-4 border-t border-border mx-3">
             <div className="px-1 pb-2 flex items-center justify-between">
@@ -340,6 +361,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <UsageSummary onUpgrade={onUpgrade} />
           </div>
         )}
+
+        {/* Account Section - visible on mobile, AuthButton shows only when Clerk configured */}
+        <div className="md:hidden p-3 border-t border-border">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink-muted">Account</span>
+            <AuthButton hideBorder />
+          </div>
+        </div>
 
         {/* Footer - hidden on mobile */}
         <div className="p-3 border-t border-border hidden md:block">

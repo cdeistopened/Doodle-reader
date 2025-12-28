@@ -1,11 +1,16 @@
 import React from 'react';
 import { useClerk, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
+interface AuthButtonProps {
+  /** Hide the left border separator (used when not in header) */
+  hideBorder?: boolean;
+}
+
 /**
  * Auth button that only renders when Clerk is configured.
  * Shows Sign In button when logged out, UserButton when logged in.
  */
-export const AuthButton: React.FC = () => {
+export const AuthButton: React.FC<AuthButtonProps> = ({ hideBorder = false }) => {
   // Check if we're inside ClerkProvider by trying to use the hook
   try {
     // This will throw if not in ClerkProvider context
@@ -16,7 +21,7 @@ export const AuthButton: React.FC = () => {
   }
 
   return (
-    <div className="ml-3 pl-3 border-l border-border">
+    <div className={hideBorder ? "" : "ml-3 pl-3 border-l border-border"}>
       <SignedOut>
         <SignInButton mode="modal">
           <button className="text-sm font-medium text-ink-soft hover:text-accent transition-colors">
