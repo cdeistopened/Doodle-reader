@@ -270,13 +270,51 @@ From Google Reader report:
 - **High contrast states** - Unread vs read must be obvious
 - **Don't waste bright color on rare actions** - Subscribe button shouldn't be brightest thing
 
-| Element | Color | Purpose |
-|---------|-------|---------|
-| Links | #2200CC | Classic web blue |
-| Starred | #FFC000 | Gold |
-| Unread bg | #FFFFFF | White |
-| Read bg | #F0F0F0 | Grey |
-| Selection | #FFFFD6 | Yellow highlight |
+### Google Reader Classic Palette (Full Hex Reference)
+
+| Component | Hex Code | Usage |
+|-----------|----------|-------|
+| Primary Link Blue | #2200CC | Article titles, action links |
+| Action Blue | #1558D6 | Primary buttons ("Mark all read") |
+| Selection Yellow | #FFFFD6 | Current item highlight (J/K active) |
+| Unread Background | #FFFFFF | Unread items |
+| Read Background | #F0F0F0 | Read items (faded) |
+| Text Black | #333333 | Body text (not harsh #000) |
+| Snippet Grey | #777777 | List snippets, metadata |
+| Border Grey | #EBEBEB | Item separation |
+| Star Gold | #FFC000 | Active star icon |
+| Subscribe Red | #D14836 | Google red (2011) |
+| Folder Blue | #5F9EA0 | Sidebar folder highlight |
+| Sidebar BG | #F6F9FF | Light blue-grey |
+
+### Typography Specs
+
+```css
+/* Font Stack */
+font-family: Arial, Helvetica, sans-serif;
+
+/* Row Heights */
+.list-item { height: 26-28px; }
+
+/* Padding */
+.list-item { padding: 2px 5px; }
+.sidebar-item { padding: 1px 0px 1px 12px; }
+
+/* Font Sizes */
+.sidebar-feed { font-size: 13px; }
+.list-title { font-size: 13px; font-weight: bold; } /* unread */
+.list-title-read { font-size: 13px; font-weight: normal; }
+.expanded-headline { font-size: 18-20px; font-weight: bold; }
+```
+
+### Design Revamp Consideration
+
+Current Doodle palette vs Google Reader:
+- [ ] Audit current colors against semantic meaning
+- [ ] Ensure unread/read contrast is strong enough
+- [ ] Verify star color is gold not grey
+- [ ] Check link colors are distinct from body text
+- [ ] Consider "Compact Density" mode toggle
 
 ---
 
