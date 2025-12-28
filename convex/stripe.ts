@@ -152,7 +152,6 @@ export const checkUsageLimit = query({
     switch (action) {
       case "transcribe": {
         const limit = limits.transcriptionMinutes;
-        if (limit === -1) return { allowed: true };
         const remaining = limit - currentUsage.transcriptionMinutes;
         if (remaining < amount) {
           return {
