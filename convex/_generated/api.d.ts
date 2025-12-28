@@ -8,10 +8,12 @@
  * @module
  */
 
+import type * as boards from "../boards.js";
 import type * as documents from "../documents.js";
 import type * as feeds from "../feeds.js";
 import type * as folders from "../folders.js";
 import type * as stats from "../stats.js";
+import type * as stripe from "../stripe.js";
 
 import type {
   ApiFromModules,
@@ -20,10 +22,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  boards: typeof boards;
   documents: typeof documents;
   feeds: typeof feeds;
   folders: typeof folders;
   stats: typeof stats;
+  stripe: typeof stripe;
 }>;
 
 /**

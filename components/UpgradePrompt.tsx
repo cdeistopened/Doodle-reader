@@ -244,7 +244,7 @@ export function UsageSummary({ onUpgrade }: { onUpgrade: () => void }) {
         />
       </div>
 
-      {subscription.currentPeriodEnd && (
+      {'currentPeriodEnd' in subscription && subscription.currentPeriodEnd && (
         <p className="text-xs text-stone-500">
           Resets {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
         </p>
