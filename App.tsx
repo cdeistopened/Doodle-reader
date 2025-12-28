@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
+import { PhotoScanModal } from './components/PhotoScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
 import { PricingModal } from './components/PricingModal';
 import { BoardView } from './components/BoardView';
@@ -86,6 +87,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
   const [isScanOpen, setScanOpen] = useState(false);
   const [isFolderScanOpen, setFolderScanOpen] = useState(false);
+  const [isPhotoScanOpen, setPhotoScanOpen] = useState(false);
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isPricingOpen, setPricingOpen] = useState(false);
@@ -319,6 +321,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
         onUnsubscribe={(feedId) => unsubscribe(feedId, true)}
         onScanPdf={() => setScanOpen(true)}
         onFolderScan={() => setFolderScanOpen(true)}
+        onPhotoScan={() => setPhotoScanOpen(true)}
         documentCount={documentCount}
         isOpen={isSidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -421,6 +424,12 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
         isOpen={isFolderScanOpen}
         onClose={() => setFolderScanOpen(false)}
         onScanComplete={handleBatchScanComplete}
+      />
+
+      <PhotoScanModal
+        isOpen={isPhotoScanOpen}
+        onClose={() => setPhotoScanOpen(false)}
+        onScanComplete={saveScannedDocument}
       />
 
       <BulkTranscribeModal
