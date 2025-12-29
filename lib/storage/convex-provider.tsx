@@ -66,6 +66,7 @@ interface ConvexStorageContextType {
   queryDocuments: (query: DocumentQuery) => Document[];
   queryFeeds: (query?: FeedQuery) => FeedSource[];
   getDocument: (id: string) => Document | undefined;
+  fetchFullDocument: (id: string) => Promise<Document | null>;
   getFeed: (id: string) => FeedSource | undefined;
   getFeedByUrl: (url: string) => FeedSource | undefined;
 }
@@ -81,7 +82,8 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
   const convex = useConvex();
 
   // Reactive queries - these auto-update when data changes
-  const rawDocuments = useQuery(api.documents.list, {}) ?? [];
+  // Use listSummaries (lightweight, no content) for list views to save bandwidth
+  const rawDocuments = useQuery(api.documents.listSummaries, {}) ?? [];
   const rawFeeds = useQuery(api.feeds.list, {}) ?? [];
   const rawFolders = useQuery(api.folders.list, {}) ?? [];
   const rawStats = useQuery(api.stats.get, {});
@@ -109,6 +111,7 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
   const reorderFoldersMutation = useMutation(api.folders.reorder);
 
   // Transform Convex documents to our Document type
+  // Note: listSummaries doesn't include content - use getDocument() to fetch full content
   const documents = useMemo(() => {
     return rawDocuments.map((doc): Document => ({
       id: doc._id,
@@ -118,7 +121,7 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
       created: doc.created,
       modified: doc.modified,
       status: doc.status,
-      content: doc.content,
+      content: '', // Content not loaded in list view - fetch via getDocument()
       summary: doc.summary,
       tags: doc.tags,
       folderId: doc.folderId,
@@ -126,7 +129,6 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
       ...(doc.transcript && { transcript: doc.transcript }),
       ...(doc.scan && { scan: doc.scan }),
       ...(doc.video && { video: doc.video }),
-      ...(doc.ai && { ai: doc.ai }),
     } as Document));
   }, [rawDocuments]);
 
@@ -401,9 +403,34 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
     return result;
   }, [feeds]);
 
+  // getDocument returns cached metadata - use fetchFullDocument for content
   const getDocument = useCallback((id: string): Document | undefined => {
     return documents.find((d) => d.id === id);
   }, [documents]);
+
+  // Fetch full document including content (for detail view)
+  const fetchFullDocument = useCallback(async (id: string): Promise<Document | null> => {
+    const doc = await convex.query(api.documents.get, { id: id as Id<'documents'> });
+    if (!doc) return null;
+    return {
+      id: doc._id,
+      type: doc.type,
+      source: doc.source,
+      title: doc.title,
+      created: doc.created,
+      modified: doc.modified,
+      status: doc.status,
+      content: doc.content,
+      summary: doc.summary,
+      tags: doc.tags,
+      folderId: doc.folderId,
+      ...(doc.article && { article: doc.article }),
+      ...(doc.transcript && { transcript: doc.transcript }),
+      ...(doc.scan && { scan: doc.scan }),
+      ...(doc.video && { video: doc.video }),
+      ...(doc.ai && { ai: doc.ai }),
+    } as Document;
+  }, [convex]);
 
   const getFeed = useCallback((id: string): FeedSource | undefined => {
     return feeds.find((f) => f.id === id);
@@ -438,6 +465,7 @@ export function ConvexStorageProvider({ children }: { children: React.ReactNode 
     queryDocuments,
     queryFeeds,
     getDocument,
+    fetchFullDocument,
     getFeed,
     getFeedByUrl,
   };

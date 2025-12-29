@@ -66,6 +66,70 @@ export const get = query({
 /**
  * Get all unique tags with counts
  */
+/**
+ * Analyze storage usage - estimates size of documents
+ * Run this to see what's eating bandwidth
+ */
+export const storageAnalysis = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { error: "Not authenticated" };
+
+    const userId = identity.subject;
+
+    const documents = await ctx.db
+      .query("documents")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    // Estimate size of each document
+    const docSizes = documents.map((doc) => {
+      const json = JSON.stringify(doc);
+      const sizeKB = json.length / 1024;
+
+      // Break down content vs assets
+      const contentSize = (doc.content?.length || 0) / 1024;
+      const rawSize = (doc.assets?.raw?.content?.length || 0) / 1024;
+      const polishedSize = (doc.assets?.polished?.content?.length || 0) / 1024;
+      const summarySize = (JSON.stringify(doc.assets?.summaries || []).length) / 1024;
+
+      return {
+        id: doc._id,
+        title: doc.title.slice(0, 50),
+        type: doc.type,
+        source: doc.source,
+        totalKB: Math.round(sizeKB),
+        contentKB: Math.round(contentSize),
+        rawKB: Math.round(rawSize),
+        polishedKB: Math.round(polishedSize),
+        summaryKB: Math.round(summarySize),
+      };
+    });
+
+    // Sort by size descending
+    docSizes.sort((a, b) => b.totalKB - a.totalKB);
+
+    // Aggregate by type
+    const byType: Record<string, { count: number; totalKB: number }> = {};
+    for (const doc of docSizes) {
+      if (!byType[doc.type]) byType[doc.type] = { count: 0, totalKB: 0 };
+      byType[doc.type].count++;
+      byType[doc.type].totalKB += doc.totalKB;
+    }
+
+    const totalKB = docSizes.reduce((sum, d) => sum + d.totalKB, 0);
+
+    return {
+      totalDocuments: documents.length,
+      totalSizeMB: Math.round(totalKB / 1024 * 10) / 10,
+      byType,
+      topTenLargest: docSizes.slice(0, 10),
+      duplicationWarning: docSizes.filter(d => d.rawKB > 0 && d.contentKB > 0).length,
+    };
+  },
+});
+
 export const tags = query({
   args: {},
   handler: async (ctx) => {

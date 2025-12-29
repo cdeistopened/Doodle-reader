@@ -12,7 +12,115 @@ import { query, mutation } from "./_generated/server";
 // =============================================================================
 
 /**
- * List all documents for the current user
+ * List documents for the current user (lightweight - no content)
+ * Use this for feed list views to save bandwidth
+ */
+export const listSummaries = query({
+  args: {
+    type: v.optional(v.string()),
+    feedId: v.optional(v.string()),
+    status: v.optional(v.string()),
+    isRead: v.optional(v.boolean()),
+    isStarred: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+    sortBy: v.optional(v.string()),
+    sortOrder: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const userId = identity.subject;
+    let documents;
+
+    // Use appropriate index based on filters
+    if (args.type) {
+      documents = await ctx.db
+        .query("documents")
+        .withIndex("by_user_type", (q) =>
+          q.eq("userId", userId).eq("type", args.type as any)
+        )
+        .collect();
+    } else if (args.status) {
+      documents = await ctx.db
+        .query("documents")
+        .withIndex("by_user_status", (q) =>
+          q.eq("userId", userId).eq("status", args.status as any)
+        )
+        .collect();
+    } else {
+      documents = await ctx.db
+        .query("documents")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+    }
+
+    // Apply additional filters
+    if (args.feedId) {
+      documents = documents.filter(
+        (d) => d.article?.feedId === args.feedId || d.transcript?.feedId === args.feedId
+      );
+    }
+
+    if (args.isRead !== undefined) {
+      documents = documents.filter(
+        (d) => d.article?.isRead === args.isRead
+      );
+    }
+
+    if (args.isStarred !== undefined) {
+      documents = documents.filter(
+        (d) => d.article?.isStarred === args.isStarred
+      );
+    }
+
+    // Sort
+    const sortField = args.sortBy || "created";
+    const sortOrder = args.sortOrder || "desc";
+
+    documents.sort((a, b) => {
+      const aVal = (a as any)[sortField] || a.created;
+      const bVal = (b as any)[sortField] || b.created;
+      const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortOrder === "desc" ? -comparison : comparison;
+    });
+
+    // Limit
+    if (args.limit) {
+      documents = documents.slice(0, args.limit);
+    }
+
+    // Return lightweight version - NO content, NO assets
+    return documents.map((doc) => ({
+      _id: doc._id,
+      _creationTime: doc._creationTime,
+      type: doc.type,
+      source: doc.source,
+      title: doc.title,
+      created: doc.created,
+      modified: doc.modified,
+      status: doc.status,
+      summary: doc.summary,
+      tags: doc.tags,
+      folderId: doc.folderId,
+      article: doc.article,
+      transcript: doc.transcript ? {
+        feedUrl: doc.transcript.feedUrl,
+        feedId: doc.transcript.feedId,
+        podcastTitle: doc.transcript.podcastTitle,
+        duration: doc.transcript.duration,
+        pubDate: doc.transcript.pubDate,
+      } : undefined,
+      scan: doc.scan,
+      video: doc.video,
+      // Explicitly exclude: content, assets, ai
+    }));
+  },
+});
+
+/**
+ * List all documents for the current user (FULL - includes content)
+ * WARNING: High bandwidth - use listSummaries for list views
  */
 export const list = query({
   args: {

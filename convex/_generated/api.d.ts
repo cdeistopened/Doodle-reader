@@ -12,6 +12,7 @@ import type * as boards from "../boards.js";
 import type * as documents from "../documents.js";
 import type * as feeds from "../feeds.js";
 import type * as folders from "../folders.js";
+import type * as http from "../http.js";
 import type * as stats from "../stats.js";
 import type * as stripe from "../stripe.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   documents: typeof documents;
   feeds: typeof feeds;
   folders: typeof folders;
+  http: typeof http;
   stats: typeof stats;
   stripe: typeof stripe;
 }>;
