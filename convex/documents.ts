@@ -8,6 +8,45 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // =============================================================================
+// VALIDATION
+// =============================================================================
+
+const VALID_TYPES = ["article", "transcript", "scan", "video", "note"] as const;
+const VALID_STATUSES = ["draft", "processing", "complete", "error", "archived"] as const;
+const VALID_SOURCES = ["rss", "podcast", "youtube", "scan", "manual", "newsletter"] as const;
+
+function validateType(type: string): void {
+  if (!VALID_TYPES.includes(type as any)) {
+    throw new Error(`Invalid type: ${type}. Must be one of: ${VALID_TYPES.join(", ")}`);
+  }
+}
+
+function validateStatus(status: string): void {
+  if (!VALID_STATUSES.includes(status as any)) {
+    throw new Error(`Invalid status: ${status}. Must be one of: ${VALID_STATUSES.join(", ")}`);
+  }
+}
+
+function validateSource(source: string): void {
+  if (!VALID_SOURCES.includes(source as any)) {
+    throw new Error(`Invalid source: ${source}. Must be one of: ${VALID_SOURCES.join(", ")}`);
+  }
+}
+
+// Helper to check isRead status across document types
+// Note: Only articles have isRead/isStarred. Transcripts are considered "read" by default.
+function getIsRead(doc: { article?: { isRead?: boolean }; transcript?: unknown }): boolean {
+  if (doc.article) return doc.article.isRead ?? false;
+  if (doc.transcript) return true; // Transcripts don't have read status, treat as read
+  return true; // Other types don't have read status
+}
+
+function getIsStarred(doc: { article?: { isStarred?: boolean } }): boolean {
+  if (doc.article) return doc.article.isStarred ?? false;
+  return false; // Only articles can be starred
+}
+
+// =============================================================================
 // QUERIES
 // =============================================================================
 
@@ -63,15 +102,11 @@ export const listSummaries = query({
     }
 
     if (args.isRead !== undefined) {
-      documents = documents.filter(
-        (d) => d.article?.isRead === args.isRead
-      );
+      documents = documents.filter((d) => getIsRead(d) === args.isRead);
     }
 
     if (args.isStarred !== undefined) {
-      documents = documents.filter(
-        (d) => d.article?.isStarred === args.isStarred
-      );
+      documents = documents.filter((d) => getIsStarred(d) === args.isStarred);
     }
 
     // Sort
@@ -170,15 +205,11 @@ export const list = query({
     }
 
     if (args.isRead !== undefined) {
-      documents = documents.filter(
-        (d) => d.article?.isRead === args.isRead
-      );
+      documents = documents.filter((d) => getIsRead(d) === args.isRead);
     }
 
     if (args.isStarred !== undefined) {
-      documents = documents.filter(
-        (d) => d.article?.isStarred === args.isStarred
-      );
+      documents = documents.filter((d) => getIsStarred(d) === args.isStarred);
     }
 
     // Sort
@@ -307,11 +338,11 @@ export const count = query({
     }
 
     if (args.isRead !== undefined) {
-      documents = documents.filter((d) => d.article?.isRead === args.isRead);
+      documents = documents.filter((d) => getIsRead(d) === args.isRead);
     }
 
     if (args.isStarred !== undefined) {
-      documents = documents.filter((d) => d.article?.isStarred === args.isStarred);
+      documents = documents.filter((d) => getIsStarred(d) === args.isStarred);
     }
 
     return documents.length;
@@ -344,6 +375,11 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
+
+    // Validate enum fields
+    validateType(args.type);
+    validateSource(args.source);
+    if (args.status) validateStatus(args.status);
 
     const now = new Date().toISOString();
 
@@ -396,6 +432,9 @@ export const update = mutation({
     if (!doc || doc.userId !== identity.subject) {
       throw new Error("Document not found");
     }
+
+    // Validate enum fields if provided
+    if (args.status) validateStatus(args.status);
 
     const { id, ...updates } = args;
     const filtered = Object.fromEntries(
@@ -523,19 +562,19 @@ export const markFeedAsRead = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
+    // Find unread documents in this feed
+    // Note: Only articles have isRead status. Transcripts don't track read state.
     const feedDocs = documents.filter(
       (d) =>
-        (d.article?.feedId === args.feedId || d.transcript?.feedId === args.feedId) &&
+        d.article?.feedId === args.feedId &&
         d.article?.isRead === false
     );
 
     for (const doc of feedDocs) {
-      if (doc.article) {
-        await ctx.db.patch(doc._id, {
-          article: { ...doc.article, isRead: true },
-          modified: now,
-        });
-      }
+      await ctx.db.patch(doc._id, {
+        article: { ...doc.article!, isRead: true },
+        modified: now,
+      });
     }
   },
 });

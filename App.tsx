@@ -399,6 +399,8 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
             hasTranscriptionKey={hasTranscriptionKey}
             setTranscriptionKey={setTranscriptionKey}
             onUpdateSummary={updateSummary}
+            showBoards={enableBoards}
+            getDocumentId={enableBoards ? (itemId: string) => itemId as Id<"documents"> : undefined}
           />
         )}
       </div>

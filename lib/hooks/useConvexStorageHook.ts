@@ -10,6 +10,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useConvexStorage } from '../storage/convex-provider';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import type {
   Document,
   ArticleDocument,
@@ -92,6 +94,9 @@ export function useConvexStorageHook(): UseStorageReturn {
   const convex = useConvexStorage();
   const [error, setError] = useState<string | null>(null);
   const [localLoading, setLocalLoading] = useState(false);
+
+  // Usage tracking action
+  const incrementUsage = useAction(api.stripe.incrementUsage);
 
   // Transform Convex data to the old FeedItem/FeedSource types for UI compatibility
   const items = useMemo(() => {
@@ -327,6 +332,31 @@ export function useConvexStorageHook(): UseStorageReturn {
         content: finalContent,
         article: { ...extendedArticle, transcriptionStatus: 'complete' },
       } as ArticleDocument);
+
+      // Track usage - estimate minutes from duration or content
+      try {
+        let minutes = 1; // Default to 1 minute minimum
+        if (item.duration) {
+          // Parse duration string (e.g., "44:12" or "1:23:45" or raw seconds "2652")
+          const dur = item.duration;
+          if (/^\d+$/.test(dur)) {
+            // Raw seconds
+            minutes = Math.ceil(parseInt(dur, 10) / 60);
+          } else {
+            // HH:MM:SS or MM:SS format
+            const parts = dur.split(':').map(Number);
+            if (parts.length === 3) {
+              minutes = Math.ceil(parts[0] * 60 + parts[1] + parts[2] / 60);
+            } else if (parts.length === 2) {
+              minutes = Math.ceil(parts[0] + parts[1] / 60);
+            }
+          }
+        }
+        await incrementUsage({ action: 'transcribe', amount: minutes });
+      } catch (usageError) {
+        // Don't fail transcription if usage tracking fails
+        console.warn('Failed to track transcription usage:', usageError);
+      }
     } catch (e) {
       // Update status to error
       await convex.saveDocument({
@@ -335,7 +365,7 @@ export function useConvexStorageHook(): UseStorageReturn {
       } as ArticleDocument);
       throw e;
     }
-  }, [items, feeds, convex]);
+  }, [items, feeds, convex, incrementUsage]);
 
   const hasTranscriptionKey = useCallback((provider: TranscriptionProvider = 'assemblyai') => {
     return provider === 'gemini' ? hasGeminiApiKey() : hasApiKey();
