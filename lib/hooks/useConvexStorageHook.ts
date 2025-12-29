@@ -29,7 +29,7 @@ import {
 import type { FeedItem, FeedSource as OldFeedSource } from '../../types';
 import { fetchFeed } from '../rss';
 import { transcribeAudio, hasApiKey, setApiKey, type TranscriptionProgress } from '../transcribe';
-import { transcribeAudioWithGemini, hasGeminiApiKey } from '../transcribeGemini';
+import { transcribeAudioWithGemini, hasGeminiApiKey, type EpisodeMetadata } from '../transcribeGemini';
 import { polishTranscript, hasGeminiKey } from '../polish';
 import { getTranscript } from '../youtube';
 
@@ -301,9 +301,26 @@ export function useConvexStorageHook(): UseStorageReturn {
       let finalContent: string;
 
       if (provider === 'gemini') {
-        // Use Gemini for transcription
+        // Use Gemini for transcription with full episode metadata
         onProgress?.({ status: 'processing', message: 'Transcribing with Gemini...' });
-        const result = await transcribeAudioWithGemini(item.audioUrl, item.title, onProgress);
+
+        // Build metadata for better speaker identification
+        const episodeMetadata: EpisodeMetadata = {
+          title: item.title,
+          feedName: feed?.name,
+          author: item.author || undefined,
+          description: item.snippet || undefined,
+          pubDate: item.timestamp ? new Date(item.timestamp).toISOString() : undefined,
+          duration: item.duration || undefined,
+          episodeUrl: item.url,
+        };
+
+        const result = await transcribeAudioWithGemini(
+          item.audioUrl,
+          item.title,
+          onProgress,
+          episodeMetadata
+        );
         finalContent = result.content;
       } else {
         // Use AssemblyAI for transcription

@@ -102,6 +102,13 @@ function buildTranscriptionPrompt(metadata: EpisodeMetadata): string {
   if (metadata.title) context += `Episode title: "${metadata.title}"\n`;
   if (metadata.feedName) context += `Podcast/Show: "${metadata.feedName}"\n`;
   if (metadata.author) context += `Author/Host: ${metadata.author}\n`;
+  if (metadata.description) {
+    // Truncate long descriptions to avoid overwhelming the prompt
+    const desc = metadata.description.length > 500
+      ? metadata.description.substring(0, 500) + '...'
+      : metadata.description;
+    context += `Episode description: ${desc}\n`;
+  }
 
   return `You are a professional transcriptionist. Transcribe this audio completely and accurately.
 
