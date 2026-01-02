@@ -33,6 +33,18 @@ import { transcribeAudioWithGemini, hasGeminiApiKey, type EpisodeMetadata } from
 import { polishTranscript, hasGeminiKey } from '../polish';
 import { getTranscript } from '../youtube';
 
+// Helper to strip HTML for episode description
+const stripHtmlForDescription = (html: string): string => {
+  if (!html) return '';
+  // Create a temporary div to parse HTML
+  const tmp = document.createElement("DIV");
+  tmp.innerHTML = html;
+  // Get text content and clean up whitespace
+  const text = (tmp.textContent || tmp.innerText || "").trim();
+  // Collapse multiple spaces and newlines
+  return text.replace(/\s+/g, ' ').trim();
+};
+
 export type TranscriptionProvider = 'assemblyai' | 'gemini';
 
 interface UseStorageReturn {
@@ -309,7 +321,8 @@ export function useConvexStorageHook(): UseStorageReturn {
           title: item.title,
           feedName: feed?.name,
           author: item.author || undefined,
-          description: item.snippet || undefined,
+          // Use full content for better speaker identification (not truncated snippet)
+          description: stripHtmlForDescription(item.content) || item.snippet || undefined,
           pubDate: item.timestamp ? new Date(item.timestamp).toISOString() : undefined,
           duration: item.duration || undefined,
           episodeUrl: item.url,

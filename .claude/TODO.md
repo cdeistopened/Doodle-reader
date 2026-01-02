@@ -179,6 +179,38 @@
 
 ---
 
+## 🎙️ Authorized.ai Integration (New Partnership)
+
+### Podcast Archive Service
+- [ ] Prominent call-to-action for podcast archiving ("Get Your Entire Podcast Archived")
+- [ ] Replace/enhance "Transcribe All" with dedicated archive service promotion
+- [ ] Pop-up modal explaining the service benefits:
+  - Complete podcast backlog transcription
+  - Searchable archive creation
+  - Export to multiple formats
+  - Bulk pricing for full shows
+- [ ] Integration with Authorized.ai API for bulk processing
+- [ ] Progress tracking for large archive jobs
+- [ ] Special pricing tiers for full podcast archives
+
+### UI/UX Improvements
+- [ ] Banner in feed view for podcast feeds
+- [ ] "Archive This Podcast" button in feed header
+- [ ] Success stories/testimonials carousel
+- [ ] Estimated cost calculator based on episode count
+
+---
+
+## 🐛 Bug Fixes
+
+### RSS Feed Issues
+- [ ] Fix: Full podcast descriptions not loading from RSS feed
+  - Check if description/content:encoded fields are being parsed
+  - iTunes-specific fields (itunes:summary) may need special handling
+  - May need to handle HTML content in descriptions
+
+---
+
 ## 📝 Notes
 
 - Security fixes should be prioritized before any public launch

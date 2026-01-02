@@ -240,14 +240,25 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
     const itemTitle = getTagValue(node, 'title') || '(No Title)';
     const itemLink = isAtom ? getAtomLink(node) : getTagValue(node, 'link');
 
-    // Content strategies
-    const itemContent = getTagValue(node, 'content:encoded') ||
+    // Content strategies - prioritize iTunes fields for podcasts
+    const itunesSummary = getTagValue(node, 'itunes:summary');
+    const itunesSubtitle = getTagValue(node, 'itunes:subtitle');
+    const regularDescription = getTagValue(node, 'description');
+    const contentEncoded = getTagValue(node, 'content:encoded');
+    
+    // For podcasts, iTunes summary often has the most detailed episode info
+    const itemContent = itunesSummary || 
+                        contentEncoded ||
                         getTagValue(node, 'content') ||
-                        getTagValue(node, 'description') ||
+                        regularDescription ||
                         getTagValue(node, 'summary') || '';
 
     // Smart Snippet Extraction:
-    let rawSnippet = getTagValue(node, 'description') || getTagValue(node, 'summary');
+    // Combine subtitle and description for richer preview
+    let rawSnippet = regularDescription || itunesSummary || getTagValue(node, 'summary');
+    if (itunesSubtitle && itunesSubtitle !== rawSnippet) {
+      rawSnippet = itunesSubtitle + (rawSnippet ? ' - ' + rawSnippet : '');
+    }
     if (!rawSnippet || rawSnippet.length < 10) rawSnippet = itemContent;
 
     // Clean garbage (CSS/JS)
