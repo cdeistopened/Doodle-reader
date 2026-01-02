@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OCR using Gemini 2.0 Flash for PageSnap sessions.
+OCR using Gemini 3 Flash Preview for PageSnap sessions.
 Processes all images in a session and concatenates OCR results.
 """
 
@@ -42,7 +42,7 @@ def encode_image(image_path: str) -> bytes:
 
 
 def ocr_image(client, image_path: str) -> str:
-    """OCR a single image using Gemini 2.0 Flash."""
+    """OCR a single image using Gemini 3 Flash Preview."""
     image_data = encode_image(image_path)
 
     prompt = """Extract all text from this scanned book page.
@@ -55,7 +55,7 @@ Output the text exactly as it appears, preserving:
 Do not add any commentary or explanations. Just output the text."""
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3-flash-preview",
         contents=[
             genai.types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
             prompt
