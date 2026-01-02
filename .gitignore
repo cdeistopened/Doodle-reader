@@ -31,3 +31,8 @@ temporary/
 
 # Content directories (user-generated, not in repo)
 content/
+
+# PageSnap directories (user sessions, virtual env)
+pagesnap/sessions/
+pagesnap/venv/
+pagesnap/__pycache__/
