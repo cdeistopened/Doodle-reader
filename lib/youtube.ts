@@ -182,6 +182,46 @@ async function tryInnertubeApi(videoId: string): Promise<string | null> {
 }
 
 /**
+ * Strategy 4: Try downsub.com API (reliable fallback for many videos)
+ */
+async function tryDownsubApi(videoId: string): Promise<string | null> {
+  try {
+    console.log(`[YouTube] Trying downsub.com API for ${videoId}...`);
+    
+    // First, get the available subtitles
+    const infoUrl = `https://downsub.com/?url=https://www.youtube.com/watch?v=${videoId}`;
+    const pageHtml = await fetchRawContent(infoUrl);
+    
+    // Look for English subtitle download link
+    const downloadMatch = pageHtml.match(/href="([^"]*)"[^>]*>DOWNLOAD[^<]*<[^>]*>\s*English/);
+    if (!downloadMatch || !downloadMatch[1]) {
+      console.log('[YouTube] No English subtitles found on downsub');
+      return null;
+    }
+    
+    const downloadUrl = downloadMatch[1].replace(/&amp;/g, '&');
+    const srtContent = await fetchRawContent(`https://downsub.com${downloadUrl}`);
+    
+    // Parse SRT format
+    const lines = srtContent.split('\n');
+    const textLines: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // Skip index numbers and timestamps
+      if (line && !line.match(/^\d+$/) && !line.includes('-->')) {
+        textLines.push(line);
+      }
+    }
+    
+    return textLines.join(' ');
+  } catch (e) {
+    console.log('[YouTube] Downsub API failed:', e);
+    return null;
+  }
+}
+
+/**
  * Main function: tries multiple strategies to get transcript
  *
  * Priority:
@@ -189,6 +229,7 @@ async function tryInnertubeApi(videoId: string): Promise<string | null> {
  * 2. Third-party API
  * 3. Page scrape via CORS proxy
  * 4. Innertube API
+ * 5. Downsub API (good fallback)
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
   console.log(`[YouTube] Fetching transcript for ${videoId}...`);
@@ -221,7 +262,221 @@ export async function getTranscript(videoId: string): Promise<string | null> {
     return transcript;
   }
 
+  // Strategy 4: Downsub API (good for many videos)
+  transcript = await tryDownsubApi(videoId);
+  if (transcript) {
+    console.log("[YouTube] Success via downsub API");
+    return transcript;
+  }
+
   console.warn("[YouTube] All strategies failed. Try starting the yt-dlp service:");
   console.warn("  cd projects/yt-transcript-service && npm start");
   return null;
+}
+
+/**
+ * YouTube video metadata
+ */
+export interface YouTubeMetadata {
+  videoId: string;
+  title: string;
+  author: string;
+  authorUrl?: string;
+  description: string;
+  publishedAt?: string;
+  duration?: string;
+  thumbnailUrl?: string;
+  viewCount?: string;
+  likeCount?: string;
+}
+
+/**
+ * Fetch YouTube video metadata using oEmbed API
+ * This is a reliable, official API that doesn't require authentication
+ */
+async function fetchYouTubeOEmbed(videoId: string): Promise<Partial<YouTubeMetadata> | null> {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`;
+    
+    console.log(`[YouTube] Fetching oEmbed metadata for ${videoId}...`);
+    
+    const response = await fetchRawContent(oEmbedUrl);
+    const data = JSON.parse(response);
+    
+    return {
+      title: data.title || '',
+      author: data.author_name || '',
+      authorUrl: data.author_url || '',
+      thumbnailUrl: data.thumbnail_url || '',
+      // oEmbed doesn't provide description, duration, or view count
+    };
+  } catch (e) {
+    console.log('[YouTube] oEmbed fetch failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Extract metadata from YouTube page HTML
+ */
+async function extractMetadataFromPage(videoId: string): Promise<Partial<YouTubeMetadata> | null> {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log(`[YouTube] Extracting metadata from page for ${videoId}...`);
+    
+    const pageHtml = await fetchRawContent(videoUrl);
+    
+    // Extract from structured data (JSON-LD)
+    const jsonLdMatch = pageHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    if (jsonLdMatch && jsonLdMatch[1]) {
+      try {
+        const jsonData = JSON.parse(jsonLdMatch[1]);
+        if (jsonData['@type'] === 'VideoObject') {
+          return {
+            title: jsonData.name || '',
+            description: jsonData.description || '',
+            publishedAt: jsonData.uploadDate || jsonData.datePublished || '',
+            thumbnailUrl: jsonData.thumbnailUrl?.[0] || '',
+            duration: jsonData.duration || '', // ISO 8601 duration
+          };
+        }
+      } catch (e) {
+        console.log('[YouTube] JSON-LD parse failed:', e);
+      }
+    }
+    
+    // Extract from meta tags
+    const metadata: Partial<YouTubeMetadata> = {};
+    
+    // Title
+    const titleMatch = pageHtml.match(/<meta property="og:title" content="([^"]*)">/);
+    if (titleMatch) metadata.title = titleMatch[1];
+    
+    // Description
+    const descMatch = pageHtml.match(/<meta property="og:description" content="([^"]*)">/);
+    if (descMatch) metadata.description = descMatch[1];
+    
+    // Channel name
+    const channelMatch = pageHtml.match(/<link itemprop="name" content="([^"]*)">/);
+    if (channelMatch) metadata.author = channelMatch[1];
+    
+    // View count from watch-info
+    const viewMatch = pageHtml.match(/"viewCount":"(\d+)"/);
+    if (viewMatch) metadata.viewCount = viewMatch[1];
+    
+    // Published date
+    const dateMatch = pageHtml.match(/"publishDate":"([^"]*)"/) || pageHtml.match(/"uploadDate":"([^"]*)"/);
+    if (dateMatch) metadata.publishedAt = dateMatch[1];
+    
+    return Object.keys(metadata).length > 0 ? metadata : null;
+  } catch (e) {
+    console.log('[YouTube] Page metadata extraction failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Get comprehensive YouTube video metadata
+ * Tries multiple strategies and combines results
+ */
+export async function getVideoMetadata(videoId: string): Promise<YouTubeMetadata> {
+  console.log(`[YouTube] Fetching metadata for ${videoId}...`);
+  
+  // Start with defaults
+  const metadata: YouTubeMetadata = {
+    videoId,
+    title: `Video ${videoId}`,
+    author: 'Unknown Channel',
+    description: '',
+  };
+  
+  // Try local yt-dlp service first (most comprehensive)
+  try {
+    const infoResponse = await fetch(
+      `${YT_TRANSCRIPT_SERVICE_URL}/info?v=${videoId}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    
+    if (infoResponse.ok) {
+      const info = await infoResponse.json();
+      if (info.title) metadata.title = info.title;
+      if (info.channel) metadata.author = info.channel;
+      if (info.channelUrl) metadata.authorUrl = info.channelUrl;
+      if (info.description) metadata.description = info.description;
+      if (info.duration) metadata.duration = info.duration;
+      if (info.thumbnail) metadata.thumbnailUrl = info.thumbnail;
+      if (info.uploadDate) metadata.publishedAt = info.uploadDate;
+      if (info.viewCount) metadata.viewCount = info.viewCount;
+      
+      console.log('[YouTube] Got full metadata from yt-dlp service');
+      return metadata;
+    }
+  } catch (e) {
+    console.log('[YouTube] yt-dlp info service not available');
+  }
+  
+  // Try oEmbed API (official, reliable for basic info)
+  const oEmbedData = await fetchYouTubeOEmbed(videoId);
+  if (oEmbedData) {
+    Object.assign(metadata, oEmbedData);
+    console.log('[YouTube] Got basic metadata from oEmbed');
+  }
+  
+  // Try extracting from page for additional details
+  const pageData = await extractMetadataFromPage(videoId);
+  if (pageData) {
+    // Merge, preferring non-empty values
+    if (pageData.title && !metadata.title) metadata.title = pageData.title;
+    if (pageData.description) metadata.description = pageData.description;
+    if (pageData.publishedAt) metadata.publishedAt = pageData.publishedAt;
+    if (pageData.duration) metadata.duration = pageData.duration;
+    if (pageData.viewCount) metadata.viewCount = pageData.viewCount;
+    console.log('[YouTube] Enhanced metadata from page extraction');
+  }
+  
+  return metadata;
+}
+
+/**
+ * Polish a YouTube transcript using Gemini with video metadata as context
+ */
+export async function polishYouTubeTranscript(
+  videoId: string,
+  rawTranscript: string,
+  onProgress?: (message: string) => void
+): Promise<string> {
+  // Import polish function dynamically to avoid circular dependency
+  const { polishTranscript } = await import('./polish');
+  
+  // Get video metadata for context
+  onProgress?.('Fetching video metadata...');
+  const metadata = await getVideoMetadata(videoId);
+  
+  // Build context prompt with video information
+  const contextPrompt = `# YouTube Video Context
+
+## Video Information
+- **Title**: ${metadata.title}
+- **Channel**: ${metadata.author}
+- **Published**: ${metadata.publishedAt || 'Unknown'}
+${metadata.description ? `- **Description**: ${metadata.description.substring(0, 500)}...` : ''}
+
+## Notes
+- This is a YouTube video transcript
+- Auto-generated captions may have errors with names, technical terms, or punctuation
+- The video description above may contain important context about topics, guests, or terminology
+- If the channel name is visible, use it to identify the main speaker/host
+- YouTube auto-captions often lack speaker labels - infer them from context when possible`;
+
+  onProgress?.('Polishing transcript with AI...');
+  
+  // Polish the transcript with video context
+  const polishedTranscript = await polishTranscript(
+    rawTranscript,
+    contextPrompt,
+    metadata.title
+  );
+  
+  return polishedTranscript;
 }

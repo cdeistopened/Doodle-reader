@@ -38,6 +38,23 @@ function stripHtml(html: string): string {
   return tmp.textContent || tmp.innerText || "";
 }
 
+// Generate context prompt for YouTube video polishing
+function generateYouTubeContext(item: FeedItem): string {
+  return `# YouTube Video Context
+
+## Video Information
+- **Title**: ${item.title}
+- **Channel**: ${item.author || 'Unknown'}
+${item.content && item.content.length > 20 ? `- **Description**: ${stripHtml(item.content).substring(0, 500)}...` : ''}
+
+## Notes
+- This is a YouTube video transcript
+- Auto-generated captions may have errors with names, technical terms, or punctuation
+- The video description above may contain important context about topics, guests, or terminology
+- If the channel name is visible, use it to identify the main speaker/host
+- YouTube auto-captions often lack speaker labels - infer them from context when possible`;
+}
+
 interface FeedListProps {
   items: FeedItem[];
   feeds: FeedSource[];
@@ -285,6 +302,7 @@ export const FeedList: React.FC<FeedListProps> = ({
             <ExpandedCard
               item={item}
               sourceName={sourceName}
+              feed={feeds.find(f => f.id === item.feedId)}
               onToggleStar={onToggleStar}
               onTranscribe={(id, provider) => handleTranscribe(id, provider)}
               isTranscribing={transcribingId === item.id}
@@ -318,6 +336,7 @@ export const FeedList: React.FC<FeedListProps> = ({
                 <ExpandedCard
                   item={item}
                   sourceName={getSourceName(item.feedId)}
+                  feed={feeds.find(f => f.id === item.feedId)}
                   onToggleStar={onToggleStar}
                   onTranscribe={(id, provider) => handleTranscribe(id, provider)}
                   isTranscribing={transcribingId === item.id}
@@ -685,6 +704,7 @@ const TransformOutputCard: React.FC<TransformOutputCardProps> = ({ title, conten
 interface ExpandedCardProps {
   item: FeedItem;
   sourceName: string;
+  feed?: FeedSource;
   onToggleStar: any;
   onTranscribe?: (itemId: string, provider?: TranscriptionProvider) => void;
   isTranscribing?: boolean;
@@ -693,7 +713,7 @@ interface ExpandedCardProps {
   onProviderChange?: (provider: TranscriptionProvider) => void;
 }
 
-const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdateSummary, transcriptionProvider = 'gemini', onProviderChange }: ExpandedCardProps) => {
+const ExpandedCard = ({ item, sourceName, feed, onTranscribe, isTranscribing, onUpdateSummary, transcriptionProvider = 'gemini', onProviderChange }: ExpandedCardProps) => {
   // Transform outputs - can have multiple
   // Initialize with saved aiSummary if it exists (persists polished content across navigation)
   const [transformOutputs, setTransformOutputs] = useState<Array<{ id: string; title: string; content: string }>>(() => {
@@ -1005,6 +1025,7 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
               content={contentToTransform}
               contentType={contentType}
               title={item.title}
+              contextPrompt={isVideo ? generateYouTubeContext(item) : feed?.contextPrompt}
               onResult={handleTransformResult}
               compact={true}
             />

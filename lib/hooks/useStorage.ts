@@ -29,7 +29,7 @@ import { transcribeAudio, hasApiKey, setApiKey, type TranscriptionProgress, type
 
 export type { TranscriptionProvider };
 import { polishTranscript, hasGeminiKey } from '../polish';
-import { getTranscript } from '../youtube';
+import { getTranscript, getVideoMetadata, polishYouTubeTranscript } from '../youtube';
 
 interface UseStorageReturn {
   // State
@@ -506,30 +506,16 @@ export function useStorage(): UseStorageReturn {
       throw new Error('Invalid YouTube URL. Please use a youtube.com/watch or youtu.be link.');
     }
 
+    // Fetch comprehensive metadata first
+    const metadata = await getVideoMetadata(videoId);
+
     // Fetch transcript
     const transcript = await getTranscript(videoId);
-    if (!transcript) {
-      throw new Error('Could not fetch transcript. Make sure the video has captions enabled, or try starting the yt-transcript service.');
-    }
-
-    // Fetch video info from yt-transcript service
-    let title = `Video ${videoId}`;
-    let channel: string | null = null;
-    let channelUrl: string | null = null;
-    let description: string | null = null;
-
-    try {
-      const infoResponse = await fetch(`http://localhost:3002/info?v=${videoId}`);
-      if (infoResponse.ok) {
-        const info = await infoResponse.json();
-        title = info.title || title;
-        channel = info.channel || null;
-        channelUrl = info.channelUrl || null;
-        description = info.description || null;
-      }
-    } catch {
-      // Service not available, use video ID as title
-    }
+    
+    // If no transcript but we have metadata, offer to save anyway
+    const hasTranscript = !!transcript;
+    // For videos, always save the description in content field, transcript separately if available
+    const contentToSave = metadata.description || 'No description available';
 
     const now = new Date().toISOString();
     const id = `yt-oneoff-${videoId}`;
@@ -540,35 +526,53 @@ export function useStorage(): UseStorageReturn {
       throw new Error('This video has already been imported.');
     }
 
+    // Format publish date if available
+    const publishDate = metadata.publishedAt || now;
+
     // Create as an article document in the one-off-videos feed
     const doc: ArticleDocument = {
       id,
       type: 'article',
       source: 'youtube' as any,
-      title,
+      title: metadata.title,
       created: now,
       modified: now,
       status: 'complete',
-      content: transcript,
-      summary: transcript.substring(0, 300) + '...',
-      tags: ['video', 'one-off'],
+      content: contentToSave, // This will be the description
+      summary: metadata.description ? metadata.description.substring(0, 300) + '...' : 'YouTube video',
+      tags: ['video', 'one-off', hasTranscript ? 'transcript' : 'no-transcript'],
       article: {
         url: `https://youtube.com/watch?v=${videoId}`,
         feedId: 'one-off-videos',
         feedUrl: 'oneoff://youtube',
-        siteName: channel || 'One-off Videos',
-        author: channel || undefined,
-        authorUrl: channelUrl || undefined,
-        pubDate: now,
+        siteName: metadata.author || 'One-off Videos',
+        author: metadata.author || undefined,
+        authorUrl: metadata.authorUrl || undefined,
+        pubDate: publishDate,
         isRead: false,
         isStarred: false,
-        excerpt: description ? description.substring(0, 300) : 'YouTube video transcript',
+        excerpt: metadata.description ? metadata.description.substring(0, 160) + '...' : 'YouTube video',
         mediaType: 'video',
+        // Store transcript separately if available
+        transcript: hasTranscript ? transcript : undefined,
+        // Store additional metadata in a custom field
+        videoMetadata: {
+          thumbnailUrl: metadata.thumbnailUrl,
+          duration: metadata.duration,
+          viewCount: metadata.viewCount,
+          hasTranscript,
+          publishedAt: metadata.publishedAt,
+        } as any,
       },
     };
 
     await storage.saveDocument(doc);
     await loadItems();
+    
+    // If we couldn't get transcript, inform user
+    if (!hasTranscript) {
+      console.warn(`[YouTube] Video imported without transcript. Description saved instead.`);
+    }
   }, []);
 
   return {
