@@ -33,6 +33,7 @@ export interface FeedItem {
   audioUrl?: string; // MP3/audio enclosure URL
   duration?: string; // Duration string from RSS (e.g., "01:23:45")
   transcriptionStatus?: 'none' | 'pending' | 'processing' | 'complete' | 'error';
+  transcript?: string; // Podcast transcript (separate from content)
 }
 
 export interface Folder {

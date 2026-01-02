@@ -326,6 +326,7 @@ export function useConvexStorageHook(): UseStorageReturn {
           pubDate: item.timestamp ? new Date(item.timestamp).toISOString() : undefined,
           duration: item.duration || undefined,
           episodeUrl: item.url,
+          feedContext: contextPrompt, // Add podcast-specific context from RSS feed
         };
 
         const result = await transcribeAudioWithGemini(
@@ -356,11 +357,14 @@ export function useConvexStorageHook(): UseStorageReturn {
         }
       }
 
-      // Update with transcript
+      // Update with transcript (store in transcript field to preserve original content)
       await convex.saveDocument({
         ...doc,
-        content: finalContent,
-        article: { ...extendedArticle, transcriptionStatus: 'complete' },
+        article: { 
+          ...extendedArticle, 
+          transcriptionStatus: 'complete',
+          transcript: finalContent 
+        },
       } as ArticleDocument);
 
       // Track usage - estimate minutes from duration or content

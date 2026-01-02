@@ -77,6 +77,7 @@ export function convertFeedItem(
     articleProps.audioUrl = item.audioUrl;
     articleProps.duration = item.duration;
     articleProps.transcriptionStatus = item.transcriptionStatus || 'none';
+    articleProps.transcript = item.transcript;
   }
 
   return {
@@ -123,11 +124,12 @@ export function toOldFeedItem(doc: ArticleDocument): FeedItem {
     timestamp: new Date(doc.article.pubDate).getTime(),
     isRead: doc.article.isRead,
     isStarred: doc.article.isStarred,
-    aiSummary: doc.summary,
+    aiSummary: undefined, // Only set when AI actually generates summary
     mediaType,
     audioUrl: extendedProps.audioUrl,
     duration: extendedProps.duration,
     transcriptionStatus: extendedProps.transcriptionStatus || (extendedProps.audioUrl ? 'none' : undefined),
+    transcript: extendedProps.transcript,
   };
 }
 

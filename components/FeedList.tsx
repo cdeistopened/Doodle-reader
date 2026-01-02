@@ -725,7 +725,7 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
   const isVideo = item.mediaType === 'video' || (item.url && (item.url.includes('youtube.com') || item.url.includes('youtu.be')));
   const isPodcast = item.mediaType === 'audio' || !!item.audioUrl;
   const isScannedDoc = item.feedId === 'scanned-documents';
-  const hasTranscript = item.transcriptionStatus === 'complete' && item.content;
+  const hasTranscript = item.transcriptionStatus === 'complete' && item.transcript;
 
   const getVideoId = (url: string) => {
     if (!url) return null;
@@ -801,7 +801,7 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
 
   const getContentToTransform = () => {
     if (isVideo) return rawTranscript;
-    if (isPodcast && hasTranscript) return item.content;
+    if (isPodcast && hasTranscript) return item.transcript;
     if (!isVideo && !isPodcast) return (item.content || '') + '\n' + (item.snippet || '');
     return null;
   };
@@ -986,10 +986,10 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
             title="Transcript"
             icon={<PenTool size={14} strokeWidth={1.5} />}
             defaultOpen={showTranscript}
-            badge={`${((isVideo ? rawTranscript : item.content) || '').length.toLocaleString()} chars`}
+            badge={`${((isVideo ? rawTranscript : (item.transcript || item.content)) || '').length.toLocaleString()} chars`}
           >
             <div className="prose-polished max-h-96 overflow-y-auto">
-              <ReactMarkdown>{isVideo ? rawTranscript : item.content}</ReactMarkdown>
+              <ReactMarkdown>{isVideo ? rawTranscript : (item.transcript || item.content)}</ReactMarkdown>
             </div>
           </CollapsibleSection>
         )}

@@ -38,6 +38,7 @@ export interface EpisodeMetadata {
   duration?: string;
   episodeUrl?: string;
   description?: string;
+  feedContext?: string; // Podcast-specific context from RSS feed (hosts, guests, format, etc.)
 }
 
 type ProgressCallback = (progress: GeminiTranscriptionProgress) => void;
@@ -109,6 +110,9 @@ function buildTranscriptionPrompt(metadata: EpisodeMetadata): string {
       : metadata.description;
     context += `Episode description: ${desc}\n`;
   }
+  if (metadata.feedContext) {
+    context += `\nPodcast Context (hosts, format, common guests):\n${metadata.feedContext}\n`;
+  }
 
   return `You are a professional transcriptionist. Transcribe this audio completely and accurately.
 
@@ -137,6 +141,8 @@ Your output should be clean markdown starting with:
 - Use **Name:** if you can confidently identify them from introductions or how they're addressed
 - Use **Host:** and **Guest:** for interview formats where names aren't clear
 - For solo monologues, you can omit speaker labels entirely
+- **When uncertain about a speaker's identity, explicitly note this**: Use "**Speaker 1 (uncertain identity):**" or "**Guest (name unclear):**"
+- If the podcast context provides likely speakers but you cannot confirm them in the audio, note: "**Likely [Name] but uncertain:**"
 
 ## Transcription Guidelines
 
