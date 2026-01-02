@@ -10,6 +10,80 @@ import { internal } from "./_generated/api";
 
 const http = httpRouter();
 
+/**
+ * Verify Stripe webhook signature
+ * 
+ * Stripe signatures use HMAC with SHA256. The signature header contains:
+ * - t=timestamp
+ * - v1=signature (using sha256)
+ * 
+ * We need to verify that the signature matches what we compute.
+ */
+async function verifyStripeWebhookSignature(
+  payload: string,
+  header: string,
+  secret: string
+): Promise<boolean> {
+  try {
+    // Parse the signature header
+    const elements = header.split(',');
+    let timestamp = '';
+    let signatures: string[] = [];
+
+    for (const element of elements) {
+      const [key, value] = element.split('=');
+      if (key === 't') {
+        timestamp = value;
+      } else if (key === 'v1') {
+        signatures.push(value);
+      }
+    }
+
+    if (!timestamp || signatures.length === 0) {
+      throw new Error('Invalid signature header format');
+    }
+
+    // Check if timestamp is within tolerance (5 minutes)
+    const timestampSeconds = parseInt(timestamp);
+    const currentTime = Math.floor(Date.now() / 1000);
+    const tolerance = 300; // 5 minutes
+
+    if (timestampSeconds < currentTime - tolerance) {
+      throw new Error('Timestamp outside tolerance zone');
+    }
+
+    // Compute expected signature
+    const signedPayload = `${timestamp}.${payload}`;
+    
+    // Use Web Crypto API for HMAC-SHA256
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      encoder.encode(signedPayload)
+    );
+    
+    // Convert to hex string
+    const expectedSignature = Array.from(new Uint8Array(signature))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    // Check if any of the signatures match
+    return signatures.some(sig => sig === expectedSignature);
+  } catch (error) {
+    console.error('[Stripe Webhook] Signature verification error:', error);
+    return false;
+  }
+}
+
 // =============================================================================
 // STRIPE WEBHOOK
 // =============================================================================
@@ -33,19 +107,25 @@ http.route({
       return new Response("Missing signature", { status: 400 });
     }
 
-    // Verify webhook signature (simplified - in production use stripe library)
-    // For now, we'll trust the webhook and parse the event
-    // TODO: Implement proper signature verification
-
+    // Verify webhook signature
     let event: {
       type: string;
       data: { object: Record<string, unknown> };
     };
 
     try {
+      // Verify the webhook signature
+      const isValid = await verifyStripeWebhookSignature(body, signature, webhookSecret);
+      if (!isValid) {
+        console.error("[Stripe Webhook] Invalid signature");
+        return new Response("Invalid signature", { status: 401 });
+      }
+
+      // Parse the verified event
       event = JSON.parse(body);
-    } catch {
-      return new Response("Invalid JSON", { status: 400 });
+    } catch (error: any) {
+      console.error("[Stripe Webhook] Error:", error.message);
+      return new Response(error.message || "Invalid request", { status: 400 });
     }
 
     console.log(`[Stripe Webhook] Received event: ${event.type}`);

@@ -17,8 +17,8 @@ const MAX_OUTPUT_TOKENS = 64000;
 
 // Based on testing: ~500-1000 tokens/page for dense content
 // Large PDFs can have heavy images - use smaller chunks for reliability
-// 20 pages keeps chunk size manageable for scanned documents
-const PAGES_PER_CHUNK = 20;
+// Reduced from 20 to 10 pages for better reliability with scanned documents
+const PAGES_PER_CHUNK = 10;
 
 const OCR_PROMPT = `Convert this PDF document to clean Markdown.
 
@@ -360,6 +360,7 @@ export async function processPDF(
       // Chunked processing for larger documents
       // Track completed chunks for incremental progress reporting
       const completedChunks: ChunkResult[] = [];
+      const failedChunks: Array<{ chunk: number; error: string }> = [];
 
       for (let chunk = 0; chunk < numChunks; chunk++) {
         const startPage = chunk * pagesPerChunk;
@@ -425,29 +426,60 @@ export async function processPDF(
             partialContent: updatedPartialContent,
           });
         } catch (error: any) {
-          // On chunk failure, report error but include partial results
+          // On chunk failure, record the error but continue processing
+          console.error(`[OCR] ✗ Chunk ${chunk + 1}/${numChunks} failed: ${error.message}`);
+          failedChunks.push({ chunk: chunk + 1, error: error.message });
+
+          // Report the failure but continue
           const partialContent = completedChunks.length > 0
             ? completedChunks.map(c => c.content).join('\n\n---\n\n')
             : undefined;
 
-          console.error(`[OCR] ✗ Chunk ${chunk + 1}/${numChunks} failed: ${error.message}`);
-
-          // Re-throw with partial results attached
-          const enhancedError = new Error(
-            `Chunk ${chunk + 1}/${numChunks} failed: ${error.message}. ` +
-            `${completedChunks.length} chunks completed successfully.`
-          );
-          (enhancedError as any).partialResults = {
-            completedChunks,
+          report('processing', `Chunk ${chunk + 1}/${numChunks} failed, continuing...`, {
+            currentPage: endPage + 1,
+            totalPages,
+            currentChunk: chunk + 1,
+            totalChunks: numChunks,
+            completedChunks: completedChunks.length > 0 ? [...completedChunks] : undefined,
             partialContent,
-            failedAtChunk: chunk + 1,
+          });
+
+          // Add a placeholder for the failed chunk
+          const failedChunkResult: ChunkResult = {
+            chunkNumber: chunk + 1,
+            totalChunks: numChunks,
+            startPage: startPage + 1,
+            endPage: endPage + 1,
+            content: `\n\n[ERROR: Failed to process pages ${startPage + 1}-${endPage + 1}: ${error.message}]\n\n`,
+            processingTimeMs: Date.now() - chunkStartTime,
           };
-          throw enhancedError;
+          completedChunks.push(failedChunkResult);
         }
       }
 
-      // Combine all chunks
+      // Check if we have any successful chunks
+      if (completedChunks.filter(c => !c.content.includes('[ERROR:')).length === 0) {
+        // All chunks failed
+        throw new Error('All chunks failed to process. No content could be extracted.');
+      }
+
+      // Combine all chunks (including error placeholders)
       fullContent = completedChunks.map(c => c.content).join('\n\n---\n\n');
+
+      // If we had failures, throw an error with partial results
+      if (failedChunks.length > 0) {
+        const successfulChunks = completedChunks.filter(c => !c.content.includes('[ERROR:'));
+        const enhancedError = new Error(
+          `Processing completed with errors. ${successfulChunks.length}/${numChunks} chunks successful. ` +
+          `Failed chunks: ${failedChunks.map(f => f.chunk).join(', ')}`
+        );
+        (enhancedError as any).partialResults = {
+          completedChunks: successfulChunks,
+          partialContent: fullContent,
+          failedChunks,
+        };
+        throw enhancedError;
+      }
     }
 
     const processingTimeMs = Date.now() - startTime;
