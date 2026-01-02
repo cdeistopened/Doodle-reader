@@ -161,8 +161,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // Open PageSnap in new window (Python/Flask app with motion detection)
     const pageSnapUrl = import.meta.env.VITE_PAGESNAP_URL || (
       import.meta.env.DEV
-        ? 'http://localhost:5001'
-        : 'https://pagesnap.railway.app' // Default production URL
+        ? 'http://localhost:5000'
+        : 'https://pagesnap-production.up.railway.app' // Update after Railway deployment
     );
     window.open(pageSnapUrl, 'pagesnap', 'width=1200,height=900');
     onClose?.();
