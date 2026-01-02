@@ -30,6 +30,14 @@ function formatDuration(duration: string | undefined): string {
   return duration;
 }
 
+// Helper to strip HTML tags for display
+function stripHtml(html: string): string {
+  if (!html) return '';
+  const tmp = document.createElement("DIV");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+}
+
 interface FeedListProps {
   items: FeedItem[];
   feeds: FeedSource[];
@@ -800,7 +808,7 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
 
   const contentType = getContentType();
   const contentToTransform = getContentToTransform();
-  const hasDescription = item.snippet && item.snippet.length > 20;
+  const hasDescription = (item.content && item.content.length > 20) || (item.snippet && item.snippet.length > 20);
 
   return (
     <div className="font-serif text-ink">
@@ -966,7 +974,9 @@ const ExpandedCard = ({ item, sourceName, onTranscribe, isTranscribing, onUpdate
             icon={<FileText size={14} strokeWidth={1.5} />}
             defaultOpen={showDescription}
           >
-            <p className="text-sm text-ink-soft leading-relaxed font-sans">{item.snippet}</p>
+            <div className="text-sm text-ink-soft leading-relaxed font-sans prose prose-sm max-w-none">
+              <ReactMarkdown>{stripHtml(item.content) || item.snippet}</ReactMarkdown>
+            </div>
           </CollapsibleSection>
         )}
 
