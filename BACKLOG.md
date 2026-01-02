@@ -8,6 +8,24 @@
 
 ---
 
+## Infrastructure: Deployment & Services
+
+### PageSnap: Separate App Deployment ⚠️
+**Status:** Currently embedded in main app but incompatible with production
+
+**Problem:** PageSnap is a Python Flask app (camera motion detection, OpenCV) embedded in JavaScript app. Can't deploy together on Railway.
+
+**Solution:**
+- [ ] Deploy PageSnap as separate Railway service
+- [ ] Create production-ready PageSnap with environment variables
+- [ ] Update main app to point to production PageSnap URL
+- [ ] Handle authentication/API keys between services
+- [ ] Share OCR functionality between apps
+
+**Alternative:** Simple upload-based scanning for production, keep motion detection for local development.
+
+---
+
 ## High Priority: Stream Architecture
 
 ### 1. Everything is a Stream

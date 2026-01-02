@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Camera, Search, Sparkles, Menu } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Search, Sparkles, Menu } from 'lucide-react';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 import { UsageSummary } from './UpgradePrompt';
 import { BoardsPanel } from './BoardsPanel';
@@ -18,7 +18,6 @@ interface SidebarProps {
   onUnsubscribe?: (feedId: string) => void;
   onScanPdf?: () => void;
   onFolderScan?: () => void;
-  onPhotoScan?: () => void;
   documentCount?: number;
   isOpen?: boolean;
   onClose?: () => void;
@@ -40,7 +39,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUnsubscribe,
   onScanPdf,
   onFolderScan,
-  onPhotoScan,
   documentCount = 0,
   isOpen = true,
   onClose,
@@ -157,16 +155,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onClose?.();
   };
 
-  const handlePhotoScan = () => {
-    // Open PageSnap in new window (Python/Flask app with motion detection)
-    const pageSnapUrl = import.meta.env.VITE_PAGESNAP_URL || (
-      import.meta.env.DEV
-        ? 'http://localhost:5001'
-        : 'http://localhost:5001' // PageSnap needs to run locally for now
-    );
-    window.open(pageSnapUrl, 'pagesnap', 'width=1200,height=900');
-    onClose?.();
-  };
 
   return (
     <>
@@ -347,24 +335,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ))}
           </div>
 
-          {/* Utilities Section */}
-          {onPhotoScan && (
-            <div className="mt-4 pt-4 border-t border-border mx-3">
-              <div className="px-1 pb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utilities</span>
-              </div>
-
-              <button
-                onClick={handlePhotoScan}
-                className="w-full flex items-center px-3 py-2 mx-0 rounded-md cursor-pointer select-none transition-all duration-150 mb-0.5 group hover:bg-cream-dark text-ink-soft hover:text-ink min-h-[44px] md:min-h-0"
-              >
-                <div className="flex-shrink-0 w-5 mr-3 flex items-center justify-center">
-                  <Camera size={16} className="text-ink-muted" strokeWidth={1.5} />
-                </div>
-                <span className="flex-grow truncate text-sm text-left">Photo Scan</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Usage Summary - show when authenticated */}
