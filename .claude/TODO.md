@@ -204,10 +204,10 @@
 ## 🐛 Bug Fixes
 
 ### RSS Feed Issues
-- [ ] Fix: Full podcast descriptions not loading from RSS feed
-  - Check if description/content:encoded fields are being parsed
-  - iTunes-specific fields (itunes:summary) may need special handling
-  - May need to handle HTML content in descriptions
+- [x] Fix: Full podcast descriptions not loading from RSS feed ✅
+  - Now parsing iTunes-specific fields (itunes:summary, itunes:subtitle)
+  - Full episode content passed to transcription for speaker identification
+  - HTML content properly stripped for Gemini prompts
 
 ---
 
