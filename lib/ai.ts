@@ -17,7 +17,7 @@ export const generateArticleSummary = async (prompt: string, _contentHtml?: stri
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash',
+      model: 'gemini-3-flash-preview',
       contents: content,
     });
 
@@ -37,7 +37,7 @@ export const polishTranscript = async (title: string, rawDescription: string): P
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash',
+      model: 'gemini-3-flash-preview',
       contents: `You are a professional video editor and copywriter.
       
       I am providing you with metadata/description from a video. 

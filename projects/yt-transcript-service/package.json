@@ -1,0 +1,21 @@
+{
+  "name": "yt-transcript-service",
+  "version": "1.0.0",
+  "description": "Reliable YouTube transcript fetching service using yt-dlp and youtube-transcript-api",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "install-yt-dlp": "npm run install-yt-dlp:macos",
+    "install-yt-dlp:macos": "brew install yt-dlp || echo 'Please install Homebrew first: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"'",
+    "test": "curl 'http://localhost:3002/transcript?v=dQw4w9WgXcQ'"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "youtube-transcript": "^1.0.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
