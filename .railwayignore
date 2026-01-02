@@ -1,0 +1,20 @@
+# Railway Ignore - Exclude from deployment
+
+# Dev-only services (not needed in production)
+projects/
+start-youtube-service.sh
+
+# PageSnap runtime directories
+pagesnap/sessions/
+pagesnap/venv/
+pagesnap/__pycache__/
+
+# Content directories
+content/
+
+# Dev utilities
+temporary/
+
+# Large files and logs
+*.log
+node_modules/.cache/
