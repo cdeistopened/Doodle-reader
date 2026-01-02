@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const pageSnapUrl = import.meta.env.VITE_PAGESNAP_URL || (
       import.meta.env.DEV
         ? 'http://localhost:5001'
-        : 'https://doodle-reader-production.up.railway.app/pagesnap' // Will be deployed as part of main app
+        : 'http://localhost:5001' // PageSnap needs to run locally for now
     );
     window.open(pageSnapUrl, 'pagesnap', 'width=1200,height=900');
     onClose?.();
