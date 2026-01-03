@@ -2,14 +2,14 @@ import { fetchRawContent } from './rss';
 
 /**
  * Fetch YouTube transcript using official YouTube Data API v3
- * More reliable than CORS proxies, fully legitimate
+ * More reliable and legitimate than CORS workarounds
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
   console.log(`[YouTube] Fetching transcript for ${videoId} via YouTube Data API...`);
 
   const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
   if (!apiKey) {
-    console.warn('[YouTube] No YouTube API key configured');
+    console.warn('[YouTube] No YouTube API key configured. Add VITE_YOUTUBE_API_KEY to environment variables.');
     return null;
   }
 
