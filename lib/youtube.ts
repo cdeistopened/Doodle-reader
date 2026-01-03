@@ -41,7 +41,7 @@ export async function getTranscript(videoId: string): Promise<string | null> {
     const data = await response.json();
     
     if (data.success && data.transcript && data.transcript.length > 50) {
-      console.log(`[YouTube] Success: ${data.metadata.length} characters (${data.metadata.segments} segments)`);
+      console.log(`[YouTube] Success: ${data.metadata.length} characters`);
       return data.transcript;
     }
     

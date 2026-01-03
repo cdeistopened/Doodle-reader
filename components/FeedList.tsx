@@ -730,17 +730,20 @@ const ExpandedCard = ({ item, sourceName, feed, onTranscribe, isTranscribing, on
   const [showTranscript, setShowTranscript] = useState(true); // Default open for videos
   const [showDescription, setShowDescription] = useState(false);
 
-  // Sync transformOutputs when item changes (e.g., navigating between items)
+  // Sync transformOutputs when aiSummary changes
   useEffect(() => {
     if (item.aiSummary) {
       setTransformOutputs([{ id: 'saved', title: 'Polished', content: item.aiSummary }]);
     } else {
       setTransformOutputs([]);
     }
-    // Reset other state when item changes
+  }, [item.id, item.aiSummary]);
+
+  // Reset transcript state only when navigating to a different item
+  useEffect(() => {
     setRawTranscript(null);
     setFetchError(null);
-  }, [item.id, item.aiSummary]);
+  }, [item.id]);
 
   const isVideo = item.mediaType === 'video' || (item.url && (item.url.includes('youtube.com') || item.url.includes('youtu.be')));
   const isPodcast = item.mediaType === 'audio' || !!item.audioUrl;
