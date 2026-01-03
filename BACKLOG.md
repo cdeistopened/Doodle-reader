@@ -17,9 +17,10 @@
 - [ ] Verify VITE_GEMINI_API_KEY passed to client correctly
 
 ### Feed Storage
-- [ ] **Large feeds (TechCrunch) = thousands of articles in IndexedDB**
+- [x] **Large feeds limited to 100 most recent** (was loading thousands)
+- [ ] Add "Load more" pagination for older articles
 - [ ] Current hybrid architecture: articles stay local, only starred/transcribed sync to Convex
-- [ ] Consider: article count limits, TTL cleanup, pagination
+- [ ] Consider: TTL cleanup for old unread articles
 - [ ] Monitor IndexedDB size especially on mobile
 
 ### Frontend Redesign
