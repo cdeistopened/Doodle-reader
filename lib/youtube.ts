@@ -1,17 +1,21 @@
 import { fetchRawContent } from './rss';
 
 /**
- * Fetch YouTube transcript using serverless function with youtube-transcript package
+ * Fetch YouTube transcript using Railway API server with youtube-transcript package
  * This bypasses CORS and uses proven scraping methods that actually work
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
-  console.log(`[YouTube] Fetching transcript for ${videoId} via serverless function...`);
+  console.log(`[YouTube] Fetching transcript for ${videoId} via API server...`);
 
   try {
-    // Use serverless function that implements the Innertube API approach
-    const functionUrl = `/.netlify/functions/youtube-transcript?videoId=${videoId}`;
+    // Determine API base URL (Railway in production, localhost in development)
+    const apiBaseUrl = import.meta.env.PROD 
+      ? `${window.location.origin}/api`  // Railway serves API at same origin
+      : 'http://localhost:3001/api';      // Local development API server
     
-    const response = await fetch(functionUrl);
+    const apiUrl = `${apiBaseUrl}/youtube/transcript?videoId=${videoId}`;
+    
+    const response = await fetch(apiUrl);
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -23,6 +27,10 @@ export async function getTranscript(videoId: string): Promise<string | null> {
       try {
         const errorData = await response.json();
         console.log(`[YouTube] Error: ${errorData.error}`);
+        
+        if (response.status === 429) {
+          console.log('[YouTube] Rate limited - try again later');
+        }
       } catch {
         console.log(`[YouTube] HTTP ${response.status}: ${response.statusText}`);
       }
@@ -32,8 +40,8 @@ export async function getTranscript(videoId: string): Promise<string | null> {
     
     const data = await response.json();
     
-    if (data.transcript && data.transcript.length > 50) {
-      console.log(`[YouTube] Success: ${data.transcript.length} characters (${data.segments} segments)`);
+    if (data.success && data.transcript && data.transcript.length > 50) {
+      console.log(`[YouTube] Success: ${data.metadata.length} characters (${data.metadata.segments} segments)`);
       return data.transcript;
     }
     
