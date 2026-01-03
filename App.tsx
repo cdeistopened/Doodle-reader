@@ -34,7 +34,7 @@ interface StorageHookReturn {
   toggleStar: (itemId: string) => Promise<void>;
   markAllRead: (feedId?: string) => Promise<void>;
   updateSummary: (itemId: string, summary: string) => Promise<void>;
-  transcribeItem: (itemId: string, onProgress?: any, provider?: any) => Promise<void>;
+  transcribeItem: (itemId: string, onProgress?: any, provider?: any) => Promise<string>;
   hasTranscriptionKey: (provider?: any) => boolean;
   setTranscriptionKey: (key: string) => void;
   saveScannedDocument: (title: string, content: string, metadata: any) => Promise<void>;

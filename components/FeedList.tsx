@@ -30,12 +30,36 @@ function formatDuration(duration: string | undefined): string {
   return duration;
 }
 
-// Helper to strip HTML tags for display
 function stripHtml(html: string): string {
   if (!html) return '';
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || "";
+}
+
+function htmlToMarkdown(html: string): string {
+  if (!html) return '';
+  let text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<p[^>]*>/gi, '')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<div[^>]*>/gi, '')
+    .replace(/<a\s+href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi, '[$2]($1)')
+    .replace(/<strong>([^<]*)<\/strong>/gi, '**$1**')
+    .replace(/<b>([^<]*)<\/b>/gi, '**$1**')
+    .replace(/<em>([^<]*)<\/em>/gi, '*$1*')
+    .replace(/<i>([^<]*)<\/i>/gi, '*$1*')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text;
 }
 
 // Generate context prompt for YouTube video polishing
@@ -67,7 +91,7 @@ interface FeedListProps {
   onNextItem: () => void;
   onPrevItem: () => void;
   viewMode: ViewMode;
-  onTranscribe?: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<void>;
+  onTranscribe?: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<string>;
   hasTranscriptionKey?: (provider?: TranscriptionProvider) => boolean;
   setTranscriptionKey?: (key: string) => void;
   onUpdateSummary?: (itemId: string, summary: string) => Promise<void>;
@@ -997,8 +1021,8 @@ const ExpandedCard = ({ item, sourceName, feed, onTranscribe, isTranscribing, on
             icon={<FileText size={14} strokeWidth={1.5} />}
             defaultOpen={showDescription}
           >
-            <div className="text-sm text-ink-soft leading-relaxed font-sans prose prose-sm max-w-none">
-              <ReactMarkdown>{stripHtml(item.content) || item.snippet}</ReactMarkdown>
+            <div className="text-sm text-ink-soft leading-relaxed font-sans prose prose-sm max-w-none prose-a:text-accent prose-a:underline">
+              <ReactMarkdown>{htmlToMarkdown(item.content) || item.snippet}</ReactMarkdown>
             </div>
           </CollapsibleSection>
         )}

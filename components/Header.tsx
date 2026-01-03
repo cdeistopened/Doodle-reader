@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewMode } from '../types';
-import { Search, LayoutList, CheckCheck, RefreshCw, Layout, Mic, ArrowUpDown, Menu } from 'lucide-react';
+import { Search, LayoutList, CheckCheck, RefreshCw, Layout, Mic, Calendar, Clock, ArrowUp, ArrowDown, Menu } from 'lucide-react';
 import { AuthButton } from './AuthButton';
 
 type SortOrder = 'newest' | 'oldest' | 'longest' | 'shortest';
@@ -32,19 +32,24 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSidebar,
   isMobile,
 }) => {
-  // Cycle through sort options
-  const cycleSortOrder = () => {
-    const orders: SortOrder[] = ['newest', 'oldest', 'longest', 'shortest'];
-    const currentIndex = orders.indexOf(sortOrder);
-    const nextIndex = (currentIndex + 1) % orders.length;
-    onSortChange(orders[nextIndex]);
+  const isDateSort = sortOrder === 'newest' || sortOrder === 'oldest';
+  const isDurationSort = sortOrder === 'longest' || sortOrder === 'shortest';
+  const isAscending = sortOrder === 'oldest' || sortOrder === 'shortest';
+
+  const toggleDateSort = () => {
+    if (isDateSort) {
+      onSortChange(sortOrder === 'newest' ? 'oldest' : 'newest');
+    } else {
+      onSortChange('newest');
+    }
   };
 
-  const sortLabels: Record<SortOrder, string> = {
-    newest: 'Newest',
-    oldest: 'Oldest',
-    longest: 'Longest',
-    shortest: 'Shortest',
+  const toggleDurationSort = () => {
+    if (isDurationSort) {
+      onSortChange(sortOrder === 'longest' ? 'shortest' : 'longest');
+    } else {
+      onSortChange('longest');
+    }
   };
   return (
     <div className="bg-cream px-3 md:px-4 py-3 flex items-center justify-between flex-shrink-0 z-10 sticky top-0 h-14 border-b border-border">
@@ -91,15 +96,33 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Sort Toggle */}
-        <button
-          onClick={cycleSortOrder}
-          className="flex items-center gap-1.5 px-2 py-1.5 min-h-[44px] text-ink-muted hover:text-ink hover:bg-cream-dark rounded-md transition-colors text-sm"
-          title={`Sort by: ${sortLabels[sortOrder]}`}
-        >
-          <ArrowUpDown size={14} strokeWidth={1.5} />
-          <span className="text-xs font-medium hidden sm:inline">{sortLabels[sortOrder]}</span>
-        </button>
+        {/* Sort Toggles */}
+        <div className="flex items-center bg-surface-sunken border border-border rounded-lg p-0.5">
+          <button
+            onClick={toggleDateSort}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-md transition-all text-xs font-medium ${
+              isDateSort 
+                ? 'bg-surface shadow-soft text-accent' 
+                : 'text-ink-muted hover:text-ink'
+            }`}
+            title={isDateSort ? (sortOrder === 'newest' ? 'Newest first' : 'Oldest first') : 'Sort by date'}
+          >
+            <Calendar size={12} strokeWidth={1.5} />
+            {isDateSort && (sortOrder === 'newest' ? <ArrowDown size={10} /> : <ArrowUp size={10} />)}
+          </button>
+          <button
+            onClick={toggleDurationSort}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-md transition-all text-xs font-medium ${
+              isDurationSort 
+                ? 'bg-surface shadow-soft text-accent' 
+                : 'text-ink-muted hover:text-ink'
+            }`}
+            title={isDurationSort ? (sortOrder === 'longest' ? 'Longest first' : 'Shortest first') : 'Sort by duration'}
+          >
+            <Clock size={12} strokeWidth={1.5} />
+            {isDurationSort && (sortOrder === 'longest' ? <ArrowDown size={10} /> : <ArrowUp size={10} />)}
+          </button>
+        </div>
 
         <button
           onClick={onRefresh}

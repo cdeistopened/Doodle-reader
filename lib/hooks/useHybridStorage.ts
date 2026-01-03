@@ -224,15 +224,12 @@ export function useHybridStorage() {
     itemId: string,
     onProgress?: (progress: TranscriptionProgress) => void,
     provider?: TranscriptionProvider
-  ) => {
-    // Get item BEFORE transcription to capture duration (React state won't update mid-function)
+  ): Promise<string> => {
     const item = local.items.find(i => i.id === itemId);
     const duration = item?.duration;
 
-    // This will throw if transcription fails
-    await local.transcribeItem(itemId, onProgress, provider);
+    const transcript = await local.transcribeItem(itemId, onProgress, provider);
 
-    // If we get here, transcription succeeded - track usage based on original item's duration
     if (duration) {
       const parts = duration.split(':').map(Number);
       let minutes = 1;
@@ -261,12 +258,14 @@ export function useHybridStorage() {
             audioUrl: item.audioUrl,
             duration: item.duration?.toString(),
             transcriptionStatus: 'complete',
+            transcript: transcript,
           },
         } as any);
       } catch (e) {
         console.warn('Failed to sync to Convex:', e);
       }
     }
+    return transcript;
   }, [local, convex, isSignedIn, incrementUsage]);
 
   // Save scanned document - always try Convex if signed in

@@ -67,7 +67,7 @@ interface UseStorageReturn {
   updateSummary: (itemId: string, summary: string) => Promise<void>;
 
   // Transcription
-  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<void>;
+  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<string>;
   transcribeBatch: (
     itemIds: string[],
     onBatchProgress?: (progress: { completed: number; total: number; currentTitle?: string }) => void,
@@ -286,7 +286,7 @@ export function useConvexStorageHook(): UseStorageReturn {
     itemId: string,
     onProgress?: (progress: TranscriptionProgress) => void,
     provider: TranscriptionProvider = 'gemini'
-  ) => {
+  ): Promise<string> => {
     const item = items.find(i => i.id === itemId);
     if (!item || !item.audioUrl) {
       throw new Error('Item not found or has no audio URL');
@@ -388,11 +388,10 @@ export function useConvexStorageHook(): UseStorageReturn {
         }
         await incrementUsage({ action: 'transcribe', amount: minutes });
       } catch (usageError) {
-        // Don't fail transcription if usage tracking fails
         console.warn('Failed to track transcription usage:', usageError);
       }
+      return finalContent;
     } catch (e) {
-      // Update status to error
       await convex.saveDocument({
         ...doc,
         article: { ...extendedArticle, transcriptionStatus: 'error' },

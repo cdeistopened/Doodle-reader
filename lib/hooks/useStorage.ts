@@ -52,7 +52,7 @@ interface UseStorageReturn {
   updateSummary: (itemId: string, summary: string) => Promise<void>;
 
   // Transcription
-  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<void>;
+  transcribeItem: (itemId: string, onProgress?: (progress: TranscriptionProgress) => void, provider?: TranscriptionProvider) => Promise<string>;
   hasTranscriptionKey: (provider?: TranscriptionProvider) => boolean;
   setTranscriptionKey: (key: string) => void;
 
@@ -373,6 +373,7 @@ export function useStorage(): UseStorageReturn {
           transcript: finalContent,
         } : i)
       );
+      return finalContent;
     } catch (e) {
       // Update status to error
       await storage.updateTranscriptionStatus(itemId, 'error');
