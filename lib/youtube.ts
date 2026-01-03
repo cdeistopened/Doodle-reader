@@ -1,17 +1,17 @@
 import { fetchRawContent } from './rss';
 
 /**
- * Fetch YouTube transcript using Railway API server with youtube-transcript package
- * This bypasses CORS and uses proven scraping methods that actually work
+ * Fetch YouTube transcript using Railway API server with Apify
+ * This bypasses CORS and uses professional proxy rotation
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
-  console.log(`[YouTube] Fetching transcript for ${videoId} via API server...`);
+  console.log(`[YouTube] Fetching transcript for ${videoId} via Apify...`);
 
   try {
     // Determine API base URL (Railway in production, localhost in development)
     const apiBaseUrl = import.meta.env.PROD 
       ? `${window.location.origin}/api`  // Railway serves API at same origin
-      : 'http://localhost:3001/api';      // Local development API server
+      : 'http://localhost:3000/api';      // Local development API server (same port as Railway)
     
     const apiUrl = `${apiBaseUrl}/youtube/transcript?videoId=${videoId}`;
     
