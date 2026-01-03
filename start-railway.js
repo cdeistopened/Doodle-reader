@@ -23,8 +23,7 @@ const apifyClient = new ApifyClient({
   token: process.env.APIFY_API_TOKEN,
 });
 
-// Apify actor ID for YouTube transcript scraper
-const YOUTUBE_TRANSCRIPT_ACTOR = 'insight_api_labs/youtube-transcript';
+const YOUTUBE_TRANSCRIPT_ACTOR = 'scrape-creators/best-youtube-transcripts-scraper';
 
 // Enable CORS
 app.use(cors({
@@ -66,10 +65,8 @@ app.get('/api/youtube/transcript', async (req, res) => {
   console.log(`[YouTube API] Fetching transcript via Apify for video: ${videoId}`);
   
   try {
-    // Run Apify YouTube transcript scraper
     const input = {
-      video_urls: [`https://youtube.com/watch?v=${videoId}`],
-      language: 'en',
+      videoUrls: [`https://www.youtube.com/watch?v=${videoId}`],
     };
     
     console.log('[YouTube API] Starting Apify actor run...');
@@ -93,27 +90,12 @@ app.get('/api/youtube/transcript', async (req, res) => {
     }
     
     const result = items[0];
-    console.log('[YouTube API] Apify result structure:', Object.keys(result));
+    console.log('[YouTube API] Apify result keys:', Object.keys(result));
     
-    // Handle different possible response formats from Apify
-    let transcript = null;
-    let segments = [];
-    
-    if (result.transcript) {
-      transcript = result.transcript;
-      segments = result.segments || [];
-    } else if (result.subtitles) {
-      transcript = result.subtitles;
-    } else if (result.text) {
-      transcript = result.text;
-    } else if (Array.isArray(result.items)) {
-      // If it's an array of transcript segments
-      transcript = result.items.map(item => item.text || item).join(' ');
-      segments = result.items;
-    }
+    const transcript = result.transcript_only_text || result.transcript;
     
     if (!transcript || transcript.trim().length < 10) {
-      console.log(`[YouTube API] Transcript too short or empty from Apify for ${videoId}`);
+      console.log(`[YouTube API] Transcript too short or empty for ${videoId}`);
       return res.status(404).json({
         error: 'No usable transcript found',
         videoId,
@@ -121,20 +103,18 @@ app.get('/api/youtube/transcript', async (req, res) => {
       });
     }
     
-    // Clean up transcript
-    const cleanTranscript = transcript
-      .replace(/\s+/g, ' ')
-      .trim();
+    const cleanTranscript = transcript.replace(/\s+/g, ' ').trim();
     
-    console.log(`[YouTube API] Apify success: ${cleanTranscript.length} chars, ${segments.length} segments`);
+    console.log(`[YouTube API] Success: ${cleanTranscript.length} chars`);
     
     res.json({
       success: true,
       videoId,
       transcript: cleanTranscript,
+      title: result.title || null,
+      thumbnail: result.thumbnail || null,
       metadata: {
         length: cleanTranscript.length,
-        segments: segments.length,
         source: 'apify',
         actor: YOUTUBE_TRANSCRIPT_ACTOR,
         runId: run.id
