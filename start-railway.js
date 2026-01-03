@@ -68,7 +68,7 @@ app.get('/api/youtube/transcript', async (req, res) => {
   try {
     // Run Apify YouTube transcript scraper
     const input = {
-      videoUrls: [`https://youtube.com/watch?v=${videoId}`],
+      video_urls: [`https://youtube.com/watch?v=${videoId}`],
       language: 'en',
     };
     
