@@ -144,23 +144,34 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
 
   const getSourceIcon = (source: DiscoveredFeed['source']) => {
     switch (source) {
+      case 'itunes':
+      case 'podcastindex':
+        return <Rss size={12} className="text-purple-500" />;
       case 'feedly':
         return <Rss size={12} className="text-accent" />;
       case 'autodiscover':
         return <Globe size={12} className="text-status-success" />;
       case 'gemini':
         return <Sparkles size={12} className="text-purple-500" />;
+      default:
+        return <Rss size={12} className="text-ink-muted" />;
     }
   };
 
   const getSourceLabel = (source: DiscoveredFeed['source']) => {
     switch (source) {
+      case 'itunes':
+        return 'iTunes';
+      case 'podcastindex':
+        return 'Podcast Index';
       case 'feedly':
         return 'Feedly';
       case 'autodiscover':
         return 'Auto-discovered';
       case 'gemini':
         return 'AI Found';
+      default:
+        return 'Found';
     }
   };
 
