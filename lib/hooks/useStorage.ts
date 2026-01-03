@@ -553,17 +553,14 @@ export function useStorage(): UseStorageReturn {
         isStarred: false,
         excerpt: metadata.description ? metadata.description.substring(0, 160) + '...' : 'YouTube video',
         mediaType: 'video',
-        // Store transcript separately if available
+        // Store transcript and metadata in extended properties (as any)
         transcript: hasTranscript ? transcript : undefined,
-        // Store additional metadata in a custom field
-        videoMetadata: {
-          thumbnailUrl: metadata.thumbnailUrl,
-          duration: metadata.duration,
-          viewCount: metadata.viewCount,
-          hasTranscript,
-          publishedAt: metadata.publishedAt,
-        } as any,
-      },
+        thumbnailUrl: metadata.thumbnail,
+        duration: metadata.duration,
+        viewCount: metadata.viewCount,
+        hasTranscript,
+        publishedAt: metadata.publishedAt,
+      } as any,
     };
 
     await storage.saveDocument(doc);
