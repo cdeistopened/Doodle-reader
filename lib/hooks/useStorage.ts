@@ -365,14 +365,12 @@ export function useStorage(): UseStorageReturn {
         }
       }
 
-      // Update with transcript
       await storage.updateTranscriptionStatus(itemId, 'complete', finalContent);
       setItems((prev) =>
         prev.map((i) => i.id === itemId ? {
           ...i,
           transcriptionStatus: 'complete',
-          content: finalContent,
-          aiSummary: finalContent.substring(0, 500) + '...'
+          transcript: finalContent,
         } : i)
       );
     } catch (e) {

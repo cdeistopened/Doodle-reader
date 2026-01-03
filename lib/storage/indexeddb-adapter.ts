@@ -413,10 +413,8 @@ export class IndexedDBAdapter implements ReactiveStorageAdapter {
     const extendedProps = articleDoc.article as any;
     extendedProps.transcriptionStatus = status;
 
-    // If transcript provided, store it in the content
-    // DON'T overwrite summary - that's reserved for polished/AI content
     if (transcript && status === 'complete') {
-      articleDoc.content = transcript;
+      extendedProps.transcript = transcript;
     }
 
     await this.saveDocument(articleDoc);
