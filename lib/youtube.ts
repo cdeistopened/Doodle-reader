@@ -1,34 +1,32 @@
-// @ts-ignore - youtube-transcript doesn't have types
-import { YoutubeTranscript } from 'youtube-transcript';
 import { fetchRawContent } from './rss';
 
 /**
- * Simple YouTube transcript fetching using youtube-transcript package
+ * Fetch YouTube transcript via serverless function (avoids CORS)
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
   console.log(`[YouTube] Fetching transcript for ${videoId}...`);
 
   try {
-    // Use the youtube-transcript package - it handles all the complexity for us
-    const transcriptArray = await YoutubeTranscript.fetchTranscript(videoId);
+    // Use serverless function to avoid CORS issues
+    const functionUrl = `/.netlify/functions/youtube-transcript?videoId=${videoId}`;
     
-    if (!transcriptArray || transcriptArray.length === 0) {
-      console.log('[YouTube] No transcript found');
-      return null;
+    const response = await fetch(functionUrl);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log('[YouTube] No transcript available for this video');
+        return null;
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-
-    // Convert array of transcript objects to plain text
-    const transcript = transcriptArray
-      .map((item: any) => item.text)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (transcript.length > 50) {
-      console.log(`[YouTube] Got ${transcript.length} characters`);
-      return transcript;
+    
+    const data = await response.json();
+    
+    if (data.transcript && data.transcript.length > 50) {
+      console.log(`[YouTube] Got ${data.transcript.length} characters (${data.segments} segments)`);
+      return data.transcript;
     }
-
+    
     return null;
   } catch (error: any) {
     console.log(`[YouTube] Transcript fetch failed: ${error.message}`);
