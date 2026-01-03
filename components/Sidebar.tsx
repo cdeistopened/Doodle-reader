@@ -203,7 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="w-full bg-accent hover:bg-accent-muted text-white transition-all rounded-md h-10 md:h-10 min-h-[44px] flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
           >
             <Plus size={18} strokeWidth={2} />
-            <span className="font-medium text-sm">Subscribe</span>
+            <span className="font-medium text-sm">Add Feed</span>
           </button>
 
           <div className="flex gap-2">

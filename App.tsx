@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { FeedList } from './components/FeedList';
 import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
+import { WelcomeState } from './components/WelcomeState';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
 import { BulkTranscribeModal } from './components/BulkTranscribeModal';
@@ -366,19 +367,10 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
             </div>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="flex-grow flex items-center justify-center">
-            <div className="text-gray-500 text-center">
-              <p className="mb-4 text-lg">No items to display.</p>
-              {feeds.length === 0 && (
-                <button
-                  onClick={() => setSubscribeOpen(true)}
-                  className="bg-reader-active text-white px-6 py-2 rounded-full font-medium shadow-sm hover:shadow-md transition-all"
-                >
-                  Add your first feed
-                </button>
-              )}
-            </div>
-          </div>
+          <WelcomeState 
+            onAddFeed={() => setSubscribeOpen(true)}
+            hasFeeds={feeds.length > 0}
+          />
         ) : (
           <FeedList
             items={filteredItems}

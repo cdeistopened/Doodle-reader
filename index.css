@@ -26,14 +26,14 @@
   --cream-warm: #f5f3ef;
   --cream-dark: #e7e5e0;
 
-  /* Primary accent - deep oceanic teal */
-  --accent: #0d7377;
-  --accent-muted: #14919b;
-  --accent-soft: #d0f0f4;
+  /* Primary accent - warm sage green */
+  --accent: #2d6a4f;
+  --accent-muted: #40916c;
+  --accent-soft: #d8f3dc;
 
-  /* Secondary accent - warm terracotta for highlights */
-  --accent-warm: #c2410c;
-  --accent-warm-soft: #fed7aa;
+  /* Secondary accent - warm amber for highlights */
+  --accent-warm: #bc6c25;
+  --accent-warm-soft: #fefae0;
 
   --surface: #ffffff;
   --surface-elevated: #fafaf9;

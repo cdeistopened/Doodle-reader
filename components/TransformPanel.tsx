@@ -19,6 +19,8 @@
 import React, { useState } from 'react';
 import { Loader2, PenTool, Sparkles, FileText, Search, ChevronDown, ChevronRight, X, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { useAction } from 'convex/react';
+import { api } from '../convex/_generated/api';
 import {
   useTransform,
   getBuiltinsForType,
@@ -75,8 +77,13 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
   const [customPrompt, setCustomPrompt] = useState('');
   const [activeTransformId, setActiveTransformId] = useState<string | null>(null);
 
-  // Get transforms available for this content type
+  const incrementUsage = useAction(api.stripe.incrementUsage);
+
   const transforms = getBuiltinsForType(contentType);
+
+  const trackSummarizeUsageIfAuthenticated = async () => {
+    await incrementUsage({ action: 'summarize', amount: 1 }).catch(() => {});
+  };
 
   const handleRunTransform = async (transform: Transform) => {
     setActiveTransformId(transform.id);
@@ -88,6 +95,7 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
 
     if (!result.error && onResult) {
       onResult(result, transform);
+      trackSummarizeUsageIfAuthenticated();
     }
     setActiveTransformId(null);
   };
@@ -114,6 +122,7 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
 
     if (!result.error && onResult) {
       onResult(result, customTransform);
+      trackSummarizeUsageIfAuthenticated();
     }
     setActiveTransformId(null);
     setShowCustom(false);

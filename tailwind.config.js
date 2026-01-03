@@ -20,17 +20,16 @@ export default {
           dark: '#e7e5e0',
         },
 
-        // Primary accent - deep oceanic teal
+        // Primary accent - warm sage green (more inviting for readers)
         accent: {
-          DEFAULT: '#0d7377',
-          muted: '#14919b',
-          soft: '#d0f0f4',
-          warm: '#c2410c',       // Terracotta secondary
-          'warm-soft': '#fed7aa',
+          DEFAULT: '#2d6a4f',
+          muted: '#40916c',
+          soft: '#d8f3dc',
+          warm: '#bc6c25',
+          'warm-soft': '#fefae0',
         },
 
-        // Alias for components using reader-active
-        'reader-active': '#0d7377',
+        'reader-active': '#2d6a4f',
 
         // Functional colors
         surface: {

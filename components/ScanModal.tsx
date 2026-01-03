@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Loader2, FileText, Upload, X, CheckCircle2 } from 'lucide-react';
+import { useAction } from 'convex/react';
+import { api } from '../convex/_generated/api';
 import { processPDF, titleFromFilename, type OCRProgress } from '../lib/ocr';
 
 interface ScanModalProps {
@@ -19,6 +21,12 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose, onScanCom
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<OCRProgress | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const incrementUsage = useAction(api.stripe.incrementUsage);
+  
+  const trackScanUsageIfAuthenticated = (pageCount: number) => {
+    incrementUsage({ action: 'scan', amount: pageCount }).catch(() => {});
+  };
 
   if (!isOpen) return null;
 
@@ -69,6 +77,8 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose, onScanCom
         fileSizeMB: result.fileSizeMB,
         processingTimeMs: result.processingTimeMs,
       });
+      
+      trackScanUsageIfAuthenticated(result.pageCount);
 
       // Reset state
       setFile(null);
@@ -103,16 +113,20 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose, onScanCom
     const partial = (window as any).__partialOCRResults;
     if (!partial || !file) return;
 
+    const partialPageCount = partial.completedChunks.reduce((sum: number, c: any) => sum + (c.endPage - c.startPage + 1), 0);
+    
     try {
       await onScanComplete(
         `${title || titleFromFilename(file.name)} (partial)`,
         partial.content,
         {
-          pageCount: partial.completedChunks.reduce((sum: number, c: any) => sum + (c.endPage - c.startPage + 1), 0),
+          pageCount: partialPageCount,
           fileSizeMB: file.size / (1024 * 1024),
           processingTimeMs: partial.completedChunks.reduce((sum: number, c: any) => sum + c.processingTimeMs, 0),
         }
       );
+      
+      trackScanUsageIfAuthenticated(partialPageCount);
 
       // Clean up
       delete (window as any).__partialOCRResults;

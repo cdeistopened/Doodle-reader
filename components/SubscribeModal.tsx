@@ -165,13 +165,13 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-ink/20 z-50 flex items-center justify-center transition-opacity p-4">
+    <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50 flex items-center justify-center transition-opacity p-4 animate-fade-in">
       <div className="bg-surface w-full max-w-md border-2 border-ink rounded-lg shadow-brutal overflow-hidden font-sans">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="font-serif text-xl font-semibold text-ink">
-            {mode === 'video' ? 'Import Video' : 'Subscribe'}
+            {mode === 'video' ? 'Import Video' : 'Add Feed'}
           </h2>
           <button
             onClick={onClose}
@@ -193,7 +193,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
             }`}
           >
             <Rss size={16} strokeWidth={1.5} />
-            Subscribe to Feed
+            Add Feed
           </button>
           <button
             type="button"
@@ -299,7 +299,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
               <div className="mt-3 p-3 bg-status-success/10 border-2 border-status-success/30 rounded-md">
                 <div className="flex items-center gap-2 text-status-success text-sm font-medium">
                   <Check size={16} strokeWidth={2} />
-                  Ready to subscribe to: {selectedFeed.title}
+                  Ready to add: {selectedFeed.title}
                 </div>
               </div>
             )}
@@ -345,7 +345,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
                 ? `Loading ${loadingCount} episodes...`
                 : loading
                   ? 'Fetching feed...'
-                  : mode === 'video' ? 'Import' : 'Subscribe'}
+                  : mode === 'video' ? 'Import' : 'Add Feed'}
             </button>
           </div>
         </form>

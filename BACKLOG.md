@@ -1,6 +1,33 @@
 # Doodle Reader 2.0 Backlog
 ## Inspired by Google Reader + Modern AI/Context Workflows
 
+---
+
+## Current Sprint Issues (Jan 2025)
+
+### Billing Integration
+- [ ] **Stripe checkout failing** - "Failed to locate checkout" error
+- [ ] Test full checkout flow with test cards (4242 4242 4242 4242)
+- [ ] Verify webhook events received at `/stripe-webhook`
+- [x] Webhook signature verification (fixed)
+- [x] Usage tracking wired up (transcribe, scan, summarize)
+
+### API Keys
+- [ ] **Gemini API key not loading** - transcription unavailable
+- [ ] Verify VITE_GEMINI_API_KEY passed to client correctly
+
+### Feed Storage
+- [ ] **Large feeds (TechCrunch) = thousands of articles in IndexedDB**
+- [ ] Current hybrid architecture: articles stay local, only starred/transcribed sync to Convex
+- [ ] Consider: article count limits, TTL cleanup, pagination
+- [ ] Monitor IndexedDB size especially on mobile
+
+### Frontend Redesign
+- [ ] UI/UX refresh (deferred - backlog item, not urgent)
+- [ ] See "Typography Strategy" section below for details
+
+---
+
 ### Philosophy
 - Universal Markdown as interchange format
 - Context engineering: annotations travel WITH content

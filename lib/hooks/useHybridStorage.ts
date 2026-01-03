@@ -18,6 +18,8 @@
 import { useStorage } from './useStorage';
 import { useConvexStorageOptional } from '../storage/convex-provider';
 import { useAuth } from '@clerk/clerk-react';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useCallback, useEffect, useRef } from 'react';
 import type { TranscriptionProgress, TranscriptionProvider } from '../transcribe';
 
@@ -39,6 +41,7 @@ export function useHybridStorage() {
 
   // Auth state from Clerk
   const { isSignedIn, isLoaded } = useAuth();
+  const incrementUsage = useAction(api.stripe.incrementUsage);
 
   // Track if we've done initial feed sync from Convex
   const hasSyncedFeeds = useRef(false);
@@ -217,52 +220,54 @@ export function useHybridStorage() {
     }
   }, [local.items, local.feeds, local.toggleStar, convex, isSignedIn]);
 
-  // Override transcribe to save to Convex when complete
   const transcribeItem = useCallback(async (
     itemId: string,
     onProgress?: (progress: TranscriptionProgress) => void,
     provider?: TranscriptionProvider
   ) => {
-    // First, transcribe using local storage (which does the actual work)
+    // Get item BEFORE transcription to capture duration (React state won't update mid-function)
+    const item = local.items.find(i => i.id === itemId);
+    const duration = item?.duration;
+
+    // This will throw if transcription fails
     await local.transcribeItem(itemId, onProgress, provider);
 
-    // If user is signed in and Convex is available, also save to Convex library
-    if (isSignedIn && convex) {
-      const item = local.items.find(i => i.id === itemId);
-      if (item && item.transcriptionStatus === 'complete') {
-        // Save the transcribed content to Convex
-        // Note: Convex schema has extended fields (audioUrl, duration, etc.) that
-        // aren't in the local TypeScript types, so we use type assertion
-        try {
-          // Use 'as any' because Convex schema is more permissive than local types
-          // (e.g., allows 'podcast' as source, extended article fields)
-          await convex.saveDocument({
-            type: 'article',
-            title: item.title,
-            content: item.content || '',
-            source: item.mediaType === 'audio' ? 'podcast' : 'rss',
-            status: 'complete',
-            tags: [],
-            article: {
-              url: item.url,
-              feedId: item.feedId,
-              feedUrl: '',
-              siteName: local.feeds.find(f => f.id === item.feedId)?.name || '',
-              pubDate: new Date(item.timestamp).toISOString(),
-              isRead: item.isRead,
-              isStarred: item.isStarred,
-              audioUrl: item.audioUrl,
-              duration: item.duration?.toString(),
-              transcriptionStatus: 'complete',
-            },
-          } as any);
-        } catch (e) {
-          console.warn('Failed to sync to Convex:', e);
-          // Don't throw - local transcription succeeded
-        }
+    // If we get here, transcription succeeded - track usage based on original item's duration
+    if (duration) {
+      const parts = duration.split(':').map(Number);
+      let minutes = 1;
+      if (parts.length === 3) minutes = Math.ceil(parts[0] * 60 + parts[1] + parts[2] / 60);
+      else if (parts.length === 2) minutes = Math.ceil(parts[0] + parts[1] / 60);
+      incrementUsage({ action: 'transcribe', amount: minutes }).catch(() => {});
+    }
+
+    if (isSignedIn && convex && item) {
+      try {
+        await convex.saveDocument({
+          type: 'article',
+          title: item.title,
+          content: item.content || '',
+          source: item.mediaType === 'audio' ? 'podcast' : 'rss',
+          status: 'complete',
+          tags: [],
+          article: {
+            url: item.url,
+            feedId: item.feedId,
+            feedUrl: '',
+            siteName: local.feeds.find(f => f.id === item.feedId)?.name || '',
+            pubDate: new Date(item.timestamp).toISOString(),
+            isRead: item.isRead,
+            isStarred: item.isStarred,
+            audioUrl: item.audioUrl,
+            duration: item.duration?.toString(),
+            transcriptionStatus: 'complete',
+          },
+        } as any);
+      } catch (e) {
+        console.warn('Failed to sync to Convex:', e);
       }
     }
-  }, [local, convex, isSignedIn]);
+  }, [local, convex, isSignedIn, incrementUsage]);
 
   // Save scanned document - always try Convex if signed in
   const saveScannedDocument = useCallback(async (
