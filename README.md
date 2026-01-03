@@ -8,7 +8,7 @@ A playful, powerful RSS reader for converting content to clean markdown. Support
 - **YouTube Transcript Fetching** - Fetch transcripts from YouTube videos
 - **AI-Powered Summaries** - Generate summaries using Google Gemini
 - **PDF OCR** - Scan PDFs with Tesseract.js and OCR
-- **Podcast Transcription** - Transcribe audio with AssemblyAI
+- **Podcast Transcription** - Transcribe audio with Gemini (default) or AssemblyAI
 - **Multiple View Modes** - List, Expanded, and Detail views
 - **Keyboard Navigation** - Vim-style shortcuts (j/k for navigation)
 
@@ -32,8 +32,10 @@ cp .env.example .env.local
 ```
 
 Required keys:
-- `VITE_GEMINI_API_KEY` - Google Gemini API key for AI summaries
-- `VITE_ASSEMBLYAI_API_KEY` - AssemblyAI API key for podcast transcription
+- `VITE_GEMINI_API_KEY` - Google Gemini API key (summaries, transcription, OCR)
+
+Optional keys:
+- `VITE_ASSEMBLYAI_API_KEY` - AssemblyAI for transcription (alternative to Gemini)
 
 ### Development
 
@@ -52,6 +54,35 @@ npm run build
 ```bash
 npm run preview
 ```
+
+## Storage Architecture
+
+Doodle Reader uses a **hybrid storage strategy** for optimal performance and cloud sync:
+
+### Local Storage (IndexedDB)
+- **Feeds & Articles** - Fast local access, works offline
+- **Read/unread state** - Ephemeral, stays local
+- **Folder structure** - Local organization
+
+### Cloud Storage (Convex) - Signed-in users only
+- **Feed subscriptions** - Sync across devices
+- **Starred items** - Persist important content
+- **Transcripts** - Expensive to generate, shared with community
+- **Scanned documents** - OCR results preserved
+- **Boards** - Curated collections
+
+### Sync Behavior
+| Action | Unauthenticated | Signed In |
+|--------|-----------------|-----------|
+| Browse feeds | Local only | Local (fast) |
+| Transcribe podcast | Local only | Syncs to Convex |
+| Star item | Local only | Syncs to Convex |
+| Scan PDF | Local only | Syncs to Convex |
+
+**Key files:**
+- `lib/hooks/useStorage.ts` - Pure local (IndexedDB)
+- `lib/hooks/useHybridStorage.ts` - Local + Convex sync
+- `lib/hooks/useConvexStorageHook.ts` - Pure Convex
 
 ## Deployment
 
