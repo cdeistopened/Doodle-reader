@@ -102,7 +102,13 @@ const generateContextPrompt = (title: string, description: string, author: strin
   return context;
 };
 
-export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource, items: FeedItem[] }> => {
+const DEFAULT_ITEM_LIMIT = 100;
+
+export const fetchFeed = async (
+  inputUrl: string,
+  options: { limit?: number } = {}
+): Promise<{ source: FeedSource, items: FeedItem[], totalCount: number }> => {
+  const limit = options.limit ?? DEFAULT_ITEM_LIMIT;
   let url = inputUrl.trim();
   let content = '';
 
@@ -175,17 +181,16 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
         }
         
         console.log(`[RSS] Discovered linked feed: ${nextUrl}`);
-        if (nextUrl !== inputUrl) { // Prevent infinite recursion if self-referential
-           return fetchFeed(nextUrl);
+        if (nextUrl !== inputUrl) {
+           return fetchFeed(nextUrl, options);
         }
       }
     }
     
-    // Fallback: If we haven't tried searching Feedly yet (i.e. input was a full URL), try now
     if (inputUrl.includes('.')) {
         const found = await searchFeedly(inputUrl);
         if (found && found !== inputUrl) {
-            return fetchFeed(found);
+            return fetchFeed(found, options);
         }
     }
 
@@ -331,7 +336,10 @@ export const fetchFeed = async (inputUrl: string): Promise<{ source: FeedSource,
     });
   });
 
-  return { source, items };
+  const sortedItems = items.sort((a, b) => b.timestamp - a.timestamp);
+  const limitedItems = limit > 0 ? sortedItems.slice(0, limit) : sortedItems;
+
+  return { source, items: limitedItems, totalCount: items.length };
 };
 
 // --- Helpers ---
