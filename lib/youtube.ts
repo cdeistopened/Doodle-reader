@@ -1,35 +1,79 @@
 import { fetchRawContent } from './rss';
 
 /**
- * Fetch YouTube transcript via serverless function (avoids CORS)
+ * Fetch YouTube transcript using official YouTube Data API v3
+ * More reliable than CORS proxies, fully legitimate
  */
 export async function getTranscript(videoId: string): Promise<string | null> {
-  console.log(`[YouTube] Fetching transcript for ${videoId}...`);
+  console.log(`[YouTube] Fetching transcript for ${videoId} via YouTube Data API...`);
+
+  const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+  if (!apiKey) {
+    console.warn('[YouTube] No YouTube API key configured');
+    return null;
+  }
 
   try {
-    // Use serverless function to avoid CORS issues
-    const functionUrl = `/.netlify/functions/youtube-transcript?videoId=${videoId}`;
+    // Step 1: Get available captions for the video
+    const captionsUrl = `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`;
     
-    const response = await fetch(functionUrl);
+    console.log('[YouTube] Fetching available captions...');
+    const captionsResponse = await fetch(captionsUrl);
     
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log('[YouTube] No transcript available for this video');
+    if (!captionsResponse.ok) {
+      if (captionsResponse.status === 403) {
+        console.log('[YouTube] API quota exceeded or invalid key');
         return null;
       }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(`Captions API error: ${captionsResponse.status}`);
     }
     
-    const data = await response.json();
+    const captionsData = await captionsResponse.json();
     
-    if (data.transcript && data.transcript.length > 50) {
-      console.log(`[YouTube] Got ${data.transcript.length} characters (${data.segments} segments)`);
-      return data.transcript;
+    if (!captionsData.items || captionsData.items.length === 0) {
+      console.log('[YouTube] No captions available for this video');
+      return null;
+    }
+    
+    // Step 2: Find the best caption track
+    // Priority: English manual → English auto → any English → first available
+    const captions = captionsData.items;
+    
+    const englishManual = captions.find((cap: any) => 
+      cap.snippet.language === 'en' && cap.snippet.trackKind === 'standard'
+    );
+    const englishAuto = captions.find((cap: any) => 
+      cap.snippet.language === 'en' && cap.snippet.trackKind === 'ASR'
+    );
+    const anyEnglish = captions.find((cap: any) => 
+      cap.snippet.language === 'en'
+    );
+    
+    const selectedCaption = englishManual || englishAuto || anyEnglish || captions[0];
+    
+    console.log(`[YouTube] Using caption: ${selectedCaption.snippet.name} (${selectedCaption.snippet.language})`);
+    
+    // Step 3: Download the caption content
+    const captionDownloadUrl = `https://www.googleapis.com/youtube/v3/captions/${selectedCaption.id}?key=${apiKey}`;
+    
+    const transcriptResponse = await fetch(captionDownloadUrl);
+    
+    if (!transcriptResponse.ok) {
+      throw new Error(`Caption download error: ${transcriptResponse.status}`);
+    }
+    
+    // The API returns raw transcript text (not XML/SRT)
+    const transcriptText = await transcriptResponse.text();
+    
+    if (transcriptText.length > 50) {
+      console.log(`[YouTube] Got ${transcriptText.length} characters via official API`);
+      return transcriptText.trim();
     }
     
     return null;
+    
   } catch (error: any) {
-    console.log(`[YouTube] Transcript fetch failed: ${error.message}`);
+    console.log(`[YouTube] Official API failed: ${error.message}`);
     return null;
   }
 }
