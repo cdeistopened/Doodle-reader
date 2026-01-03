@@ -285,7 +285,7 @@ export function useConvexStorageHook(): UseStorageReturn {
   const transcribeItem = useCallback(async (
     itemId: string,
     onProgress?: (progress: TranscriptionProgress) => void,
-    provider: TranscriptionProvider = 'assemblyai'
+    provider: TranscriptionProvider = 'gemini'
   ) => {
     const item = items.find(i => i.id === itemId);
     if (!item || !item.audioUrl) {
