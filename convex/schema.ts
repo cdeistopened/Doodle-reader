@@ -156,6 +156,7 @@ const articleProperties = v.object({
     v.literal("complete"),
     v.literal("error")
   )),
+  transcript: v.optional(v.string()),
 });
 
 // Transcript properties
