@@ -754,12 +754,10 @@ const ExpandedCard = ({ item, sourceName, feed, onTranscribe, isTranscribing, on
   const [showTranscript, setShowTranscript] = useState(true); // Default open for videos
   const [showDescription, setShowDescription] = useState(false);
 
-  // Sync transformOutputs when aiSummary changes
   useEffect(() => {
+    console.log('[Transform UI] aiSummary changed:', item.aiSummary?.length || 0, 'chars');
     if (item.aiSummary) {
       setTransformOutputs([{ id: 'saved', title: 'Polished', content: item.aiSummary }]);
-    } else {
-      setTransformOutputs([]);
     }
   }, [item.id, item.aiSummary]);
 
