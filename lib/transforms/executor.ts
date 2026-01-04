@@ -80,8 +80,11 @@ export async function executeTransform(
 
   // Validate API key
   const apiKey = getGeminiApiKey();
+  console.log('[Transform] Starting transform:', transform.name);
+  console.log('[Transform] API key available:', !!apiKey);
   if (!apiKey) {
     const error = 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env or set it in settings.';
+    console.error('[Transform] No API key!');
     report('error', error);
     return {
       transformId: transform.id,
@@ -104,9 +107,11 @@ export async function executeTransform(
   });
 
   report('executing', `Running ${transform.name}...`);
+  console.log('[Transform] Content length:', input.content?.length || 0);
 
   try {
     const model = transform.settings?.model || 'gemini-3-flash-preview';
+    console.log('[Transform] Calling Gemini API with model:', model);
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
@@ -122,12 +127,15 @@ export async function executeTransform(
       }
     );
 
+    console.log('[Transform] Response status:', response.status);
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: response.statusText }));
+      console.error('[Transform] API error:', err);
       throw new Error(err.error?.message || `Gemini API Error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('[Transform] Got response, output length:', data.candidates?.[0]?.content?.parts?.[0]?.text?.length || 0);
     const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!output) {
