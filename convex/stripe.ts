@@ -22,7 +22,7 @@ import { internal } from "./_generated/api";
 export const PLANS = {
   free: {
     name: "Free",
-    transcriptionMinutes: 30,
+    transcriptionMinutes: 150,
     summariesPerMonth: 10,
     pdfPages: 50,
   },

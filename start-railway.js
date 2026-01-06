@@ -70,7 +70,7 @@ app.get('/api/youtube/transcript', async (req, res) => {
     };
     
     console.log('[YouTube API] Starting Apify actor run...');
-    const run = await apifyClient.actor(YOUTUBE_TRANSCRIPT_ACTOR).call(input);
+    const run = await apifyClient.actor(YOUTUBE_TRANSCRIPT_ACTOR).call(input, { timeoutSecs: 60 });
     
     if (!run || !run.defaultDatasetId) {
       throw new Error('Apify actor run failed - no dataset returned');
@@ -151,7 +151,50 @@ app.get('/api/youtube/transcript', async (req, res) => {
   }
 });
 
-// Static file serving from dist/
+app.get('/api/audio/proxy', async (req, res) => {
+  const { url } = req.query;
+  
+  if (!url) {
+    return res.status(400).json({
+      error: 'Missing url parameter',
+      usage: '/api/audio/proxy?url=AUDIO_URL'
+    });
+  }
+  
+  console.log(`[Audio Proxy] Fetching: ${url}`);
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'audio/*,*/*',
+      },
+      redirect: 'follow',
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || 'audio/mpeg';
+    const contentLength = response.headers.get('content-length');
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+    
+    console.log(`[Audio Proxy] Success: ${url} (${contentLength || 'unknown'} bytes)`);
+  } catch (error) {
+    console.error(`[Audio Proxy] Error:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.use(express.static(join(__dirname, 'dist')));
 
 // SPA fallback - serve index.html for all other routes

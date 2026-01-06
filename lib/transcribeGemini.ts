@@ -257,8 +257,13 @@ export async function transcribeAudioWithGemini(
   try {
     report('downloading', 'Downloading audio file...', 10);
 
-    // Fetch the audio file
-    const audioResponse = await fetch(audioUrl);
+    const proxyBaseUrl = import.meta.env.PROD 
+      ? `${window.location.origin}/api/audio/proxy`
+      : 'http://localhost:3000/api/audio/proxy';
+    
+    const fetchUrl = `${proxyBaseUrl}?url=${encodeURIComponent(audioUrl)}`;
+    
+    const audioResponse = await fetch(fetchUrl);
     if (!audioResponse.ok) {
       throw new Error(`Failed to fetch audio: ${audioResponse.status}`);
     }

@@ -17,7 +17,7 @@
  */
 
 import React, { useState } from 'react';
-import { Loader2, PenTool, Sparkles, FileText, Search, ChevronDown, ChevronRight, X, Check } from 'lucide-react';
+import { Loader2, PenTool, Sparkles, FileText, Search, ChevronDown, ChevronRight, X, Check, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useAction } from 'convex/react';
 import { api } from '../convex/_generated/api';
@@ -27,6 +27,7 @@ import {
   type Transform,
   type TransformResult,
 } from '../lib/transforms';
+import { useBilling } from '../lib/hooks/useBilling';
 
 interface TransformPanelProps {
   /** The content to transform */
@@ -76,7 +77,9 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
   const [showTranscript, setShowTranscript] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
   const [activeTransformId, setActiveTransformId] = useState<string | null>(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
+  const { checkLimit, trackUsage } = useBilling();
   const incrementUsage = useAction(api.stripe.incrementUsage);
 
   const transforms = getBuiltinsForType(contentType);
@@ -86,6 +89,12 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
   };
 
   const handleRunTransform = async (transform: Transform) => {
+    const limitCheck = checkLimit('summarize');
+    if (!limitCheck.allowed) {
+      setShowUpgradePrompt(true);
+      return;
+    }
+
     setActiveTransformId(transform.id);
     const result = await execute(transform, {
       content,
@@ -102,6 +111,12 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
 
   const handleRunCustom = async () => {
     if (!customPrompt.trim()) return;
+
+    const limitCheck = checkLimit('summarize');
+    if (!limitCheck.allowed) {
+      setShowUpgradePrompt(true);
+      return;
+    }
 
     const customTransform: Transform = {
       id: 'custom:' + Date.now(),
@@ -132,6 +147,37 @@ export const TransformPanel: React.FC<TransformPanelProps> = ({
   // Show transform options (always visible)
   return (
     <div className="space-y-4">
+      {showUpgradePrompt && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 rounded-lg shrink-0">
+              <Sparkles size={20} className="text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900">AI Summary Limit Reached</p>
+              <p className="text-sm text-amber-700 mt-1">
+                You've used all your free AI summaries this month. Upgrade to Pro for unlimited summaries.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('openPricing'))}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+                >
+                  <Zap size={14} />
+                  Upgrade to Pro
+                </button>
+                <button
+                  onClick={() => setShowUpgradePrompt(false)}
+                  className="px-4 py-2 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors text-sm"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transformed Output - rendered as markdown */}
       {currentResult && (
         <div className="bg-surface border-2 border-accent rounded-lg p-5">

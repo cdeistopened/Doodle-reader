@@ -13,12 +13,12 @@ interface PricingModalProps {
   onClose: () => void;
 }
 
-// These should match your Stripe Price IDs
-// Set these after creating products in Stripe Dashboard
 const PRICE_IDS = {
-  proMonthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || "price_pro_monthly",
-  proYearly: import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY || "price_pro_yearly",
+  proMonthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || null,
+  proYearly: import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY || null,
 };
+
+const STRIPE_NOT_CONFIGURED = !PRICE_IDS.proMonthly;
 
 const plans = [
   {
@@ -27,7 +27,7 @@ const plans = [
     period: "forever",
     description: "For casual readers",
     features: [
-      "30 minutes transcription/month",
+      "150 minutes transcription/month",
       "10 AI summaries/month",
       "50 PDF pages/month",
       "Unlimited RSS feeds",
@@ -66,13 +66,16 @@ export function PricingModal({ isOpen, onClose }: PricingModalProps) {
   if (!isOpen) return null;
 
   const handleCheckout = async (priceId: string | null) => {
-    if (!priceId) return;
+    if (!priceId) {
+      alert("Payments are not yet configured. Please contact support.");
+      return;
+    }
     setIsCheckingOut(true);
     try {
       await checkout(priceId);
     } catch (error) {
       console.error("Checkout error:", error);
-      alert("Failed to start checkout. Please try again.");
+      alert("Failed to start checkout. Please try again or contact support.");
     } finally {
       setIsCheckingOut(false);
     }
