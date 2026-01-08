@@ -195,6 +195,44 @@ app.get('/api/audio/proxy', async (req, res) => {
   }
 });
 
+app.get('/api/feed', async (req, res) => {
+  const { url } = req.query;
+  
+  if (!url) {
+    return res.status(400).json({
+      error: 'Missing url parameter',
+      usage: '/api/feed?url=FEED_URL'
+    });
+  }
+  
+  console.log(`[Feed Proxy] Fetching: ${url}`);
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      },
+      redirect: 'follow',
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+    
+    const content = await response.text();
+    
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(content);
+    
+    console.log(`[Feed Proxy] Success: ${url} (${content.length} bytes)`);
+  } catch (error) {
+    console.error(`[Feed Proxy] Error:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.use(express.static(join(__dirname, 'dist')));
 
 // SPA fallback - serve index.html for all other routes
