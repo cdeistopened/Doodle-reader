@@ -755,11 +755,13 @@ const ExpandedCard = ({ item, sourceName, feed, onTranscribe, isTranscribing, on
   const [showDescription, setShowDescription] = useState(false);
 
   useEffect(() => {
-    console.log('[Transform UI] aiSummary changed:', item.aiSummary?.length || 0, 'chars');
+    console.log('[Transform UI] Item changed, loading saved output:', item.aiSummary?.length || 0, 'chars');
     if (item.aiSummary) {
       setTransformOutputs([{ id: 'saved', title: 'Polished', content: item.aiSummary }]);
+    } else {
+      setTransformOutputs([]);
     }
-  }, [item.id, item.aiSummary]);
+  }, [item.id]);
 
   // Reset transcript state only when navigating to a different item
   useEffect(() => {

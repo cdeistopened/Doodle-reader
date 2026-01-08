@@ -8,7 +8,7 @@ import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 export interface PlanLimits {
-  transcriptionMinutes: number;
+  transcriptions: number;
   summariesPerMonth: number;
   pdfPages: number;
 }
@@ -23,7 +23,7 @@ export interface Subscription {
 }
 
 export interface Usage {
-  transcriptionMinutes: number;
+  transcriptions: number;
   summariesGenerated: number;
   pdfPagesScanned: number;
 }
@@ -59,12 +59,13 @@ export function useBilling() {
 
     switch (action) {
       case "transcribe": {
-        const limit = limits.transcriptionMinutes;
-        const remaining = limit - usage.transcriptionMinutes;
-        if (remaining < amount) {
+        const limit = limits.transcriptions;
+        if (limit === -1) return { allowed: true };
+        const remaining = limit - (usage.transcriptions || 0);
+        if (remaining < 1) {
           return {
             allowed: false,
-            reason: `You've used ${usage.transcriptionMinutes} of ${limit} transcription minutes this month`,
+            reason: `You've used ${usage.transcriptions || 0} of ${limit} transcriptions this month`,
             remaining,
             limit,
           };

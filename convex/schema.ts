@@ -359,10 +359,9 @@ export default defineSchema({
     // Billing period (YYYY-MM format for monthly tracking)
     period: v.string(),
 
-    // Usage metrics
-    transcriptionMinutes: v.number(),
-    summariesGenerated: v.number(),
-    pdfPagesScanned: v.number(),
+    transcriptions: v.optional(v.number()),
+    summariesGenerated: v.optional(v.number()),
+    pdfPagesScanned: v.optional(v.number()),
 
     // Timestamps
     updated: v.string(),

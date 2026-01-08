@@ -27,7 +27,7 @@ const plans = [
     period: "forever",
     description: "For casual readers",
     features: [
-      "150 minutes transcription/month",
+      "10 transcriptions/month",
       "10 AI summaries/month",
       "50 PDF pages/month",
       "Unlimited RSS feeds",
@@ -44,7 +44,7 @@ const plans = [
     yearlyPrice: "$99/year",
     description: "For power users",
     features: [
-      "500 minutes transcription/month",
+      "Unlimited transcriptions",
       "Unlimited AI summaries",
       "Unlimited PDF scanning",
       "Cloud sync across devices",

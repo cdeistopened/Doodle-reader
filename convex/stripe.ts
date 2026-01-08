@@ -22,19 +22,19 @@ import { internal } from "./_generated/api";
 export const PLANS = {
   free: {
     name: "Free",
-    transcriptionMinutes: 150,
+    transcriptions: 10,
     summariesPerMonth: 10,
     pdfPages: 50,
   },
   pro: {
     name: "Pro",
-    transcriptionMinutes: 500,
-    summariesPerMonth: -1, // unlimited
-    pdfPages: -1, // unlimited
+    transcriptions: -1,
+    summariesPerMonth: -1,
+    pdfPages: -1,
   },
   team: {
     name: "Team",
-    transcriptionMinutes: 2000,
+    transcriptions: -1,
     summariesPerMonth: -1,
     pdfPages: -1,
   },
@@ -99,7 +99,7 @@ export const getUsage = query({
       .first();
 
     return usage || {
-      transcriptionMinutes: 0,
+      transcriptions: 0,
       summariesGenerated: 0,
       pdfPagesScanned: 0,
     };
@@ -143,20 +143,20 @@ export const checkUsageLimit = query({
       .first();
 
     const currentUsage = usage || {
-      transcriptionMinutes: 0,
+      transcriptions: 0,
       summariesGenerated: 0,
       pdfPagesScanned: 0,
     };
 
-    // Check limits
     switch (action) {
       case "transcribe": {
-        const limit = limits.transcriptionMinutes;
-        const remaining = limit - currentUsage.transcriptionMinutes;
-        if (remaining < amount) {
+        const limit = limits.transcriptions;
+        if (limit === -1) return { allowed: true };
+        const remaining = limit - currentUsage.transcriptions;
+        if (remaining < 1) {
           return {
             allowed: false,
-            reason: `Transcription limit reached (${currentUsage.transcriptionMinutes}/${limit} minutes used)`,
+            reason: `Transcription limit reached (${currentUsage.transcriptions}/${limit} used)`,
             remaining,
             limit,
           };
@@ -244,7 +244,7 @@ export const createOrUpdateSubscription = internalMutation({
 export const recordUsage = internalMutation({
   args: {
     userId: v.string(),
-    transcriptionMinutes: v.optional(v.number()),
+    transcriptions: v.optional(v.number()),
     summariesGenerated: v.optional(v.number()),
     pdfPagesScanned: v.optional(v.number()),
   },
@@ -259,16 +259,16 @@ export const recordUsage = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        transcriptionMinutes: existing.transcriptionMinutes + (deltas.transcriptionMinutes || 0),
-        summariesGenerated: existing.summariesGenerated + (deltas.summariesGenerated || 0),
-        pdfPagesScanned: existing.pdfPagesScanned + (deltas.pdfPagesScanned || 0),
+        transcriptions: (existing.transcriptions || 0) + (deltas.transcriptions || 0),
+        summariesGenerated: (existing.summariesGenerated || 0) + (deltas.summariesGenerated || 0),
+        pdfPagesScanned: (existing.pdfPagesScanned || 0) + (deltas.pdfPagesScanned || 0),
         updated: now,
       });
     } else {
       await ctx.db.insert("usage", {
         userId,
         period,
-        transcriptionMinutes: deltas.transcriptionMinutes || 0,
+        transcriptions: deltas.transcriptions || 0,
         summariesGenerated: deltas.summariesGenerated || 0,
         pdfPagesScanned: deltas.pdfPagesScanned || 0,
         updated: now,
@@ -379,9 +379,6 @@ export const createPortalSession = action({
   },
 });
 
-/**
- * Increment usage for a specific action (called after AI operations)
- */
 export const incrementUsage = action({
   args: {
     action: v.union(
@@ -394,21 +391,20 @@ export const incrementUsage = action({
   handler: async (ctx, { action, amount }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
-      // Skip usage tracking for unauthenticated users (local-only mode)
       return;
     }
 
     const userId = identity.subject;
 
     const usageUpdate: {
-      transcriptionMinutes?: number;
+      transcriptions?: number;
       summariesGenerated?: number;
       pdfPagesScanned?: number;
     } = {};
 
     switch (action) {
       case "transcribe":
-        usageUpdate.transcriptionMinutes = amount;
+        usageUpdate.transcriptions = 1;
         break;
       case "summarize":
         usageUpdate.summariesGenerated = amount;

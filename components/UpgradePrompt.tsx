@@ -227,10 +227,9 @@ export function UsageSummary({ onUpgrade }: { onUpgrade: () => void }) {
 
       <div className="space-y-3">
         <UsageBar
-          label="Transcription"
-          current={Math.round(usage.transcriptionMinutes)}
-          limit={limits.transcriptionMinutes}
-          unit=" min"
+          label="Transcriptions"
+          current={usage.transcriptions || 0}
+          limit={limits.transcriptions}
         />
         <UsageBar
           label="AI Summaries"
