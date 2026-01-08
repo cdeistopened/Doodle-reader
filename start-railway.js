@@ -70,7 +70,7 @@ app.get('/api/youtube/transcript', async (req, res) => {
     };
     
     console.log('[YouTube API] Starting Apify actor run...');
-    const run = await apifyClient.actor(YOUTUBE_TRANSCRIPT_ACTOR).call(input, { timeoutSecs: 60 });
+    const run = await apifyClient.actor(YOUTUBE_TRANSCRIPT_ACTOR).call(input);
     
     if (!run || !run.defaultDatasetId) {
       throw new Error('Apify actor run failed - no dataset returned');
