@@ -394,7 +394,8 @@ export const incrementUsage = action({
   handler: async (ctx, { action, amount }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
-      throw new Error("Not authenticated");
+      // Skip usage tracking for unauthenticated users (local-only mode)
+      return;
     }
 
     const userId = identity.subject;
