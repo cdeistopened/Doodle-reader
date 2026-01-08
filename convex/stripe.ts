@@ -142,21 +142,19 @@ export const checkUsageLimit = query({
       .withIndex("by_user_period", (q) => q.eq("userId", userId).eq("period", period))
       .first();
 
-    const currentUsage = usage || {
-      transcriptions: 0,
-      summariesGenerated: 0,
-      pdfPagesScanned: 0,
-    };
+    const transcriptions = usage?.transcriptions ?? 0;
+    const summariesGenerated = usage?.summariesGenerated ?? 0;
+    const pdfPagesScanned = usage?.pdfPagesScanned ?? 0;
 
     switch (action) {
       case "transcribe": {
         const limit = limits.transcriptions;
         if (limit === -1) return { allowed: true };
-        const remaining = limit - currentUsage.transcriptions;
+        const remaining = limit - transcriptions;
         if (remaining < 1) {
           return {
             allowed: false,
-            reason: `Transcription limit reached (${currentUsage.transcriptions}/${limit} used)`,
+            reason: `Transcription limit reached (${transcriptions}/${limit} used)`,
             remaining,
             limit,
           };
@@ -166,24 +164,24 @@ export const checkUsageLimit = query({
       case "summarize": {
         const limit = limits.summariesPerMonth;
         if (limit === -1) return { allowed: true };
-        if (currentUsage.summariesGenerated >= limit) {
+        if (summariesGenerated >= limit) {
           return {
             allowed: false,
-            reason: `Summary limit reached (${currentUsage.summariesGenerated}/${limit})`,
+            reason: `Summary limit reached (${summariesGenerated}/${limit})`,
             remaining: 0,
             limit,
           };
         }
-        return { allowed: true, remaining: limit - currentUsage.summariesGenerated, limit };
+        return { allowed: true, remaining: limit - summariesGenerated, limit };
       }
       case "scan": {
         const limit = limits.pdfPages;
         if (limit === -1) return { allowed: true };
-        const remaining = limit - currentUsage.pdfPagesScanned;
+        const remaining = limit - pdfPagesScanned;
         if (remaining < amount) {
           return {
             allowed: false,
-            reason: `PDF scan limit reached (${currentUsage.pdfPagesScanned}/${limit} pages)`,
+            reason: `PDF scan limit reached (${pdfPagesScanned}/${limit} pages)`,
             remaining,
             limit,
           };
