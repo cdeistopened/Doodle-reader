@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-PageSnap Web - Browser-based page turn detection
+Doodle Scanner - Unified OCR Service
+
+Two routes:
+1. Upload existing PDF scan → Doodle OCR pipeline
+2. Camera capture → PageSnap with motion detection
+
+Part of Doodle Reader ecosystem.
 """
 
 import cv2
@@ -9,13 +15,18 @@ import time
 import os
 import json
 import threading
+import tempfile
+import uuid
+from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Tuple
 from flask import Flask, render_template_string, Response, jsonify, request, send_file, url_for
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
 
 
 class State(Enum):
@@ -287,6 +298,550 @@ class PageSnapApp:
 page_snap = PageSnapApp(camera_index=0)
 
 
+# ============================================================================
+# PDF Upload Processing
+# ============================================================================
+
+class PDFJobManager:
+    """Manages PDF upload and processing jobs."""
+
+    def __init__(self):
+        self.jobs = {}  # job_id -> job_state
+        self.lock = threading.Lock()
+        self.upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+        os.makedirs(self.upload_dir, exist_ok=True)
+
+    def create_job(self, filename: str, file_path: str, page_count: int) -> str:
+        """Create a new PDF processing job."""
+        job_id = str(uuid.uuid4())[:8]
+        with self.lock:
+            self.jobs[job_id] = {
+                'id': job_id,
+                'filename': filename,
+                'file_path': file_path,
+                'page_count': page_count,
+                'status': 'pending',  # pending, analyzing, processing, complete, error
+                'analysis': None,
+                'progress': 0,
+                'current_chunk': None,
+                'output_path': None,
+                'error': None,
+                'created_at': datetime.now().isoformat(),
+            }
+        return job_id
+
+    def get_job(self, job_id: str) -> Optional[dict]:
+        """Get job state."""
+        with self.lock:
+            return self.jobs.get(job_id, {}).copy() if job_id in self.jobs else None
+
+    def update_job(self, job_id: str, **kwargs):
+        """Update job state."""
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id].update(kwargs)
+
+    def list_jobs(self) -> list:
+        """List all jobs."""
+        with self.lock:
+            return sorted(
+                [j.copy() for j in self.jobs.values()],
+                key=lambda x: x['created_at'],
+                reverse=True
+            )
+
+    def start_processing(self, job_id: str):
+        """Start processing a PDF job in background thread."""
+        job = self.get_job(job_id)
+        if not job:
+            return False, "Job not found"
+
+        if job['status'] not in ('pending', 'error'):
+            return False, f"Job already {job['status']}"
+
+        def worker():
+            try:
+                from pdf_pipeline import process_pdf, get_pdf_info, analyze_document, get_gemini_client
+
+                self.update_job(job_id, status='analyzing')
+
+                def progress_callback(completed, total, description):
+                    pct = int(completed / total * 100) if total > 0 else 0
+                    self.update_job(job_id, progress=pct, current_chunk=description)
+
+                self.update_job(job_id, status='processing')
+
+                # Output path
+                output_dir = os.path.join(os.path.dirname(__file__), "output")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, f"{job_id}_{Path(job['filename']).stem}_ocr.md")
+
+                result = process_pdf(
+                    job['file_path'],
+                    output_path=output_path,
+                    progress_callback=progress_callback
+                )
+
+                self.update_job(
+                    job_id,
+                    status='complete',
+                    output_path=result['output_path'],
+                    analysis=result.get('analysis'),
+                    total_chars=result.get('total_chars'),
+                    total_time=result.get('total_time'),
+                    progress=100,
+                    current_chunk=None
+                )
+
+            except Exception as e:
+                self.update_job(job_id, status='error', error=str(e))
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        return True, None
+
+
+pdf_manager = PDFJobManager()
+
+
+# ============================================================================
+# HTML Templates
+# ============================================================================
+
+LANDING_PAGE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Doodle Scanner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a1a;
+            --ink-soft: #3d3d3d;
+            --ink-muted: #6b6b6b;
+            --cream: #faf8f5;
+            --cream-warm: #f5f2ed;
+            --surface: #ffffff;
+            --border: #d4d0c8;
+            --accent: #4f46e5;
+            --accent-muted: #6366f1;
+            --accent-soft: #e0e7ff;
+            --success: #16a34a;
+            --error: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--cream);
+            color: var(--ink);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 24px;
+        }
+        .logo {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 42px;
+            font-weight: 600;
+            color: var(--ink);
+            margin-bottom: 8px;
+        }
+        .tagline {
+            font-size: 16px;
+            color: var(--ink-muted);
+            margin-bottom: 48px;
+        }
+        .routes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            max-width: 800px;
+            width: 100%;
+        }
+        .route-card {
+            background: var(--surface);
+            border: 2px solid var(--ink);
+            border-radius: 12px;
+            padding: 32px;
+            text-decoration: none;
+            color: var(--ink);
+            transition: all 0.15s;
+            box-shadow: 4px 4px 0 var(--ink);
+        }
+        .route-card:hover {
+            transform: translate(-4px, -4px);
+            box-shadow: 8px 8px 0 var(--ink);
+        }
+        .route-card:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--ink);
+        }
+        .route-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .route-title {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .route-desc {
+            font-size: 14px;
+            color: var(--ink-soft);
+            line-height: 1.5;
+        }
+        .route-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 4px;
+            margin-top: 16px;
+        }
+        .footer {
+            margin-top: 48px;
+            font-size: 13px;
+            color: var(--ink-muted);
+        }
+        .footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="logo">Doodle Scanner</div>
+    <div class="tagline">Convert books and documents to clean Markdown</div>
+
+    <div class="routes">
+        <a href="/upload" class="route-card">
+            <div class="route-icon">📄</div>
+            <div class="route-title">Upload PDF</div>
+            <div class="route-desc">
+                Already have a scanned PDF? Upload it and we'll extract clean, readable text with intelligent chunking and language detection.
+            </div>
+            <span class="route-badge">Doodle OCR</span>
+        </a>
+
+        <a href="/camera" class="route-card">
+            <div class="route-icon">📷</div>
+            <div class="route-title">Scan with Camera</div>
+            <div class="route-desc">
+                Point your camera at a book and flip pages. We'll automatically detect page turns and capture each page for OCR processing.
+            </div>
+            <span class="route-badge">Doodle Scanner</span>
+        </a>
+    </div>
+
+    <div class="footer">
+        Part of <a href="http://localhost:3001">Doodle Reader</a>
+    </div>
+</body>
+</html>
+'''
+
+
+UPLOAD_PAGE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload PDF — Doodle OCR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a1a;
+            --ink-soft: #3d3d3d;
+            --ink-muted: #6b6b6b;
+            --cream: #faf8f5;
+            --cream-warm: #f5f2ed;
+            --surface: #ffffff;
+            --border: #d4d0c8;
+            --accent: #4f46e5;
+            --accent-soft: #e0e7ff;
+            --success: #16a34a;
+            --error: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--cream);
+            color: var(--ink);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: var(--accent);
+            text-decoration: none;
+            margin-bottom: 24px;
+            font-weight: 500;
+        }
+        .back-link:hover { text-decoration: underline; }
+        .header {
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border);
+        }
+        .header h1 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 32px;
+            font-weight: 600;
+        }
+        .header .subtitle {
+            font-size: 14px;
+            color: var(--ink-muted);
+            margin-top: 4px;
+        }
+        .upload-zone {
+            border: 3px dashed var(--border);
+            border-radius: 12px;
+            padding: 48px;
+            text-align: center;
+            margin-bottom: 24px;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: var(--surface);
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+        .upload-zone.uploading {
+            border-color: var(--ink-muted);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .upload-icon { font-size: 48px; margin-bottom: 16px; }
+        .upload-text {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .upload-hint {
+            font-size: 13px;
+            color: var(--ink-muted);
+        }
+        #file-input { display: none; }
+
+        .jobs-section {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .jobs-section h2 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .job-list { list-style: none; }
+        .job-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .job-item:last-child { border-bottom: none; }
+        .job-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .job-meta {
+            font-size: 13px;
+            color: var(--ink-muted);
+        }
+        .job-status {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pending { background: var(--cream-warm); color: var(--ink-muted); }
+        .status-analyzing, .status-processing { background: var(--accent-soft); color: var(--accent); }
+        .status-complete { background: #dcfce7; color: var(--success); }
+        .status-error { background: #fee2e2; color: var(--error); }
+        .job-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .job-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            background: var(--surface);
+            color: var(--ink);
+            text-decoration: none;
+        }
+        .job-btn:hover { background: var(--cream); }
+        .job-btn.primary {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        .job-progress {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--ink-muted);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 32px;
+            color: var(--ink-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Doodle Scanner</a>
+
+        <div class="header">
+            <h1>Upload PDF</h1>
+            <div class="subtitle">Upload a scanned PDF to extract clean Markdown text</div>
+        </div>
+
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Drop PDF here or click to browse</div>
+            <div class="upload-hint">Max 100MB • Scanned books and documents work best</div>
+            <input type="file" id="file-input" accept=".pdf" onchange="handleFile(this.files[0])">
+        </div>
+
+        <div class="jobs-section">
+            <h2>Recent Jobs</h2>
+            <ul class="job-list" id="job-list">
+                <li class="empty-state">No jobs yet. Upload a PDF to get started.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const uploadZone = document.getElementById('upload-zone');
+
+        // Drag and drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') {
+                handleFile(file);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file || file.type !== 'application/pdf') {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            uploadZone.classList.add('uploading');
+            uploadZone.querySelector('.upload-text').textContent = 'Uploading...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                uploadZone.classList.remove('uploading');
+                uploadZone.querySelector('.upload-text').textContent = 'Drop PDF here or click to browse';
+
+                if (data.error) {
+                    alert('Upload failed: ' + data.error);
+                } else {
+                    // Start processing immediately
+                    fetch('/api/jobs/' + data.job_id + '/start', { method: 'POST' });
+                    refreshJobs();
+                }
+            })
+            .catch(err => {
+                uploadZone.classList.remove('uploading');
+                uploadZone.querySelector('.upload-text').textContent = 'Drop PDF here or click to browse';
+                alert('Upload failed: ' + err);
+            });
+        }
+
+        function refreshJobs() {
+            fetch('/api/jobs')
+                .then(r => r.json())
+                .then(data => {
+                    const list = document.getElementById('job-list');
+                    if (data.jobs.length === 0) {
+                        list.innerHTML = '<li class="empty-state">No jobs yet. Upload a PDF to get started.</li>';
+                        return;
+                    }
+
+                    list.innerHTML = data.jobs.map(job => {
+                        const statusClass = 'status-' + job.status;
+                        const statusText = job.status.charAt(0).toUpperCase() + job.status.slice(1);
+
+                        let actions = '';
+                        if (job.status === 'complete' && job.output_path) {
+                            actions = `<a href="/api/jobs/${job.id}/download" class="job-btn primary">Download</a>`;
+                        } else if (job.status === 'pending') {
+                            actions = `<button onclick="startJob('${job.id}')" class="job-btn primary">Start</button>`;
+                        } else if (job.status === 'error') {
+                            actions = `<button onclick="startJob('${job.id}')" class="job-btn">Retry</button>`;
+                        }
+
+                        let progress = '';
+                        if (job.status === 'processing' && job.current_chunk) {
+                            progress = `<div class="job-progress">${job.progress}% - ${job.current_chunk}</div>`;
+                        }
+
+                        return `
+                            <li class="job-item">
+                                <div>
+                                    <div class="job-name">${job.filename}</div>
+                                    <div class="job-meta">${job.page_count} pages</div>
+                                    ${progress}
+                                    <div class="job-actions">${actions}</div>
+                                </div>
+                                <span class="job-status ${statusClass}">${statusText}</span>
+                            </li>
+                        `;
+                    }).join('');
+                });
+        }
+
+        function startJob(jobId) {
+            fetch('/api/jobs/' + jobId + '/start', { method: 'POST' })
+                .then(() => refreshJobs());
+        }
+
+        // Poll for updates
+        refreshJobs();
+        setInterval(refreshJobs, 2000);
+    </script>
+</body>
+</html>
+'''
+
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
@@ -302,15 +857,13 @@ HTML_TEMPLATE = '''
             --ink-muted: #6b6b6b;
             --cream: #faf8f5;
             --cream-warm: #f5f2ed;
-            --cream-dark: #ebe7e0;
             --surface: #ffffff;
             --border: #d4d0c8;
             --accent: #4f46e5;
-            --accent-muted: #6366f1;
             --accent-soft: #e0e7ff;
-            --status-success: #16a34a;
-            --status-error: #dc2626;
-            --status-warning: #f59e0b;
+            --success: #16a34a;
+            --error: #dc2626;
+            --warning: #f59e0b;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -318,8 +871,10 @@ HTML_TEMPLATE = '''
             background: var(--cream);
             color: var(--ink);
             min-height: 100vh;
+            padding: 24px;
         }
-        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .container { max-width: 900px; margin: 0 auto; }
+
         .back-link {
             display: inline-flex;
             align-items: center;
@@ -331,170 +886,209 @@ HTML_TEMPLATE = '''
             font-weight: 500;
         }
         .back-link:hover { text-decoration: underline; }
-        .header {
-            display: flex;
-            align-items: baseline;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid var(--border);
-        }
-        .header h1 {
+
+        h1 {
             font-family: 'Cormorant Garamond', Georgia, serif;
             font-size: 28px;
-            font-weight: 600;
-            color: var(--ink);
+            margin-bottom: 8px;
         }
-        .header .subtitle {
-            font-size: 14px;
-            color: var(--ink-muted);
-            margin-left: 12px;
-            font-weight: 500;
-        }
-        .video-container {
-            position: relative;
-            background: var(--ink);
-            margin-bottom: 20px;
+        .subtitle { color: var(--ink-muted); margin-bottom: 24px; }
+
+        /* Main scanner frame */
+        .scanner-frame {
+            background: var(--surface);
             border: 2px solid var(--ink);
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 4px 4px 0 var(--ink);
+            box-shadow: 6px 6px 0 var(--ink);
+        }
+
+        /* Camera area with status overlay */
+        .camera-area {
+            background: #1a1a1a;
+            position: relative;
         }
         #video-feed {
             width: 100%;
             display: block;
         }
-        .controls {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        button {
+
+        /* Status bar overlay on camera */
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.8);
             padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-text {
+            color: #888;
             font-size: 14px;
+            font-weight: 500;
+        }
+        .status-text.scanning { color: #4ade80; }
+        .status-text.turning { color: #fbbf24; }
+        .status-text.processing { color: #60a5fa; }
+        .status-text.error { color: #f87171; }
+
+        .page-count {
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'SF Mono', ui-monospace, monospace;
+        }
+
+        /* Motion indicator - subtle bar */
+        .motion-bar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 4px;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .motion-level {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: #4ade80;
+            border-radius: 2px;
+            transition: height 0.2s;
+        }
+        .motion-level.high { background: #fbbf24; }
+
+        /* Controls area */
+        .controls-area {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .main-button {
+            width: 100%;
+            max-width: 320px;
+            padding: 18px 32px;
+            font-size: 16px;
             font-weight: 600;
             border: 2px solid var(--ink);
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             transition: all 0.15s;
             font-family: 'Inter', sans-serif;
-        }
-        .btn-start {
-            background: var(--accent);
-            color: white;
-            min-width: 160px;
             box-shadow: 3px 3px 0 var(--ink);
         }
-        .btn-start:hover {
+        .main-button:hover:not(:disabled) {
             transform: translate(-2px, -2px);
             box-shadow: 5px 5px 0 var(--ink);
         }
-        .btn-start:active {
+        .main-button:active:not(:disabled) {
             transform: translate(2px, 2px);
             box-shadow: 1px 1px 0 var(--ink);
         }
-        .btn-start.active { background: var(--status-error); }
-        .btn-secondary {
-            background: var(--surface);
-            color: var(--ink);
-            box-shadow: 2px 2px 0 var(--ink);
+        .main-button:disabled {
+            cursor: wait;
+            opacity: 0.7;
         }
-        .btn-secondary:hover {
-            background: var(--cream);
-            transform: translate(-1px, -1px);
-            box-shadow: 3px 3px 0 var(--ink);
-        }
-        .btn-ocr {
-            background: var(--status-success) !important;
-            color: white;
-        }
-        select {
-            padding: 12px 16px;
-            font-size: 14px;
-            border-radius: 6px;
-            background: var(--surface);
-            color: var(--ink);
-            border: 2px solid var(--border);
-            font-family: 'Inter', sans-serif;
-            cursor: pointer;
-        }
-        select:hover { border-color: var(--ink); }
-        .status {
-            padding: 20px;
-            background: var(--surface);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .status-row {
+
+        .btn-start { background: var(--accent); color: white; }
+        .btn-stop { background: var(--error); color: white; }
+        .btn-processing { background: var(--ink-muted); color: white; }
+        .btn-done { background: var(--success); color: white; }
+
+        .secondary-actions {
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
+            gap: 16px;
             font-size: 14px;
         }
-        .status-row:last-child { margin-bottom: 0; }
-        .status-row span:first-child { color: var(--ink-muted); }
-        .status-row span:last-child { font-weight: 600; font-family: 'SF Mono', ui-monospace, monospace; font-size: 13px; }
-        .settings {
-            background: var(--cream-warm);
-            padding: 24px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 20px;
+        .secondary-actions a {
+            color: var(--ink-muted);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
-        .settings h3 {
-            font-family: 'Cormorant Garamond', Georgia, serif;
-            font-size: 18px;
+        .secondary-actions a:hover { color: var(--accent); }
+
+        /* Settings panel (hidden by default) */
+        .settings-panel {
+            display: none;
+            background: var(--cream-warm);
+            padding: 20px 24px;
+            border-top: 1px solid var(--border);
+        }
+        .settings-panel.visible { display: block; }
+        .settings-panel h3 {
+            font-size: 14px;
             font-weight: 600;
             margin-bottom: 16px;
-            color: var(--ink);
+            color: var(--ink-soft);
         }
         .setting-row {
             display: flex;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
-        .setting-row:last-child { margin-bottom: 0; }
         .setting-row label {
-            width: 160px;
-            flex-shrink: 0;
-            font-size: 14px;
-            font-weight: 500;
+            width: 120px;
+            font-size: 13px;
         }
         .setting-row input[type="range"] {
             flex: 1;
-            margin: 0 16px;
+            margin: 0 12px;
             accent-color: var(--accent);
         }
+        .setting-row select {
+            flex: 1;
+            margin: 0 12px;
+            padding: 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 13px;
+        }
         .setting-row .value {
-            width: 50px;
+            width: 40px;
+            font-size: 13px;
+            font-weight: 600;
             text-align: right;
-            font-weight: 600;
-            font-family: 'SF Mono', ui-monospace, monospace;
-            font-size: 14px;
         }
-        .setting-help {
-            font-size: 12px;
-            color: var(--ink-muted);
-            margin-top: 6px;
+
+        /* Results panel */
+        .results-panel {
+            display: none;
+            padding: 24px;
+            text-align: center;
         }
-        .instructions {
-            background: var(--surface);
-            padding: 20px;
+        .results-panel.visible { display: block; }
+        .results-icon { font-size: 48px; margin-bottom: 12px; }
+        .results-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+        .results-meta { color: var(--ink-muted); font-size: 14px; margin-bottom: 20px; }
+        .results-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .results-btn {
+            padding: 10px 20px;
             border: 2px solid var(--border);
-            border-radius: 8px;
+            border-radius: 6px;
             font-size: 14px;
-            color: var(--ink-soft);
+            font-weight: 500;
+            cursor: pointer;
+            background: var(--surface);
         }
-        .instructions h3 {
-            font-family: 'Cormorant Garamond', Georgia, serif;
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: var(--ink);
+        .results-btn:hover { background: var(--cream); }
+        .results-btn.primary {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
         }
-        .instructions ol { margin-left: 20px; }
-        .instructions li { margin-bottom: 8px; line-height: 1.5; }
+        .results-btn.primary:hover { background: var(--accent); opacity: 0.9; }
+
+        /* Capture flash effect */
         #capture-flash {
             display: none;
             position: fixed;
@@ -504,6 +1098,9 @@ HTML_TEMPLATE = '''
             z-index: 1000;
         }
         .capture-sound { display: none; }
+
+        /* Hidden data */
+        #session-name, #output-dir { display: none; }
     </style>
 </head>
 <body>
@@ -511,144 +1108,133 @@ HTML_TEMPLATE = '''
     <audio id="capture-sound" class="capture-sound" preload="auto">
         <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2LkpONgHBkZHN/ipSUjoF0aGZue4qUlo+DdsHBwb2/vry+vMDAvL+/vb++vby8u76+vL6+vb6+vb2+vr6+vb69vb29vry8vL28vb28vLy7u7y8vLy7" type="audio/wav">
     </audio>
+
+    <!-- Hidden data elements -->
+    <span id="session-name">{{ session_name }}</span>
+    <span id="output-dir">{{ output_dir }}</span>
+
     <div class="container">
-        <a href="http://localhost:3001" class="back-link">← Back to Doodle Reader</a>
+        <a href="/" class="back-link">← Back to Doodle Scanner</a>
+        <h1>Camera Scan</h1>
+        <p class="subtitle">Position camera over your book and flip pages</p>
 
-        <div class="header">
-            <h1>Page Snap</h1>
-            <span class="subtitle">Camera OCR Utility</span>
-        </div>
+        <div class="scanner-frame">
+            <div class="camera-area">
+                <img id="video-feed" src="/video_feed" alt="Camera Feed">
 
-        <div class="video-container" id="video-container">
-            <img id="video-feed" src="/video_feed" alt="Camera Feed">
-        </div>
+                <!-- Motion indicator -->
+                <div class="motion-bar">
+                    <div class="motion-level" id="motion-level" style="height: 20%"></div>
+                </div>
 
-        <div class="controls">
-            <button id="toggle-btn" class="btn-start" onclick="toggleDetection()">Start Scanning</button>
-            <button class="btn-secondary" onclick="newSession()">New Session</button>
-            <button class="btn-secondary btn-ocr" onclick="runOCR()" id="ocr-btn">Run OCR</button>
-            <select id="camera-select" onchange="switchCamera(this.value)">
-                <option value="">Loading cameras...</option>
-            </select>
-            <select id="session-select" onchange="loadSession(this.value)">
-                <option value="">Select Session...</option>
-            </select>
-        </div>
-
-        <div class="status">
-            <div class="status-row">
-                <span>Session:</span>
-                <span id="session-name">{{ session_name }}</span>
-            </div>
-            <div class="status-row">
-                <span>Pages Captured:</span>
-                <span id="capture-count">0</span>
-            </div>
-            <div class="status-row">
-                <span>Output:</span>
-                <span id="output-dir">{{ output_dir }}</span>
-            </div>
-            <div class="status-row" style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <span>State:</span>
-                <span id="current-state">IDLE</span>
-            </div>
-            <div class="status-row">
-                <span>Motion Level:</span>
-                <span id="delta-display">0</span>
-            </div>
-            <div class="status-row" id="ocr-status-row" style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <span>OCR:</span>
-                <span id="ocr-status">Idle</span>
-            </div>
-            <div class="status-row" id="ocr-progress-row" style="display: none;">
-                <span>OCR Progress:</span>
-                <span id="ocr-progress">0/0</span>
-            </div>
-            <div class="status-row" id="ocr-output-row" style="display: none;">
-                <span>OCR Output:</span>
-                <span><a id="ocr-output-link" href="#" target="_blank">Open OCR markdown</a></span>
-            </div>
-        </div>
-
-        <div class="settings">
-            <h3>Settings</h3>
-
-            <div class="setting-row">
-                <label>Sensitivity:</label>
-                <input type="range" id="sensitivity" min="1" max="10" value="5" onchange="updateSensitivity(this.value)">
-                <span class="value" id="sensitivity-val">5</span>
-            </div>
-            <div class="setting-help" style="margin-left: 160px; margin-bottom: 16px;">
-                Higher = detects smaller movements. Lower = needs bigger page flips.
+                <!-- Status overlay -->
+                <div class="status-bar">
+                    <span class="status-text" id="status-text">Ready to scan</span>
+                    <span class="page-count" id="page-count">0 pages</span>
+                </div>
             </div>
 
-            <div class="setting-row">
-                <label>Capture Delay:</label>
-                <input type="range" id="stability-delay" min="0.3" max="3" step="0.1" value="1.0" onchange="updateDelay(this.value)">
-                <span class="value" id="stability-delay-val">1.0s</span>
-            </div>
-            <div class="setting-help" style="margin-left: 160px;">
-                How long the page must be still before capturing. Increase if capturing too early.
-            </div>
-        </div>
+            <!-- Main controls -->
+            <div class="controls-area" id="controls-area">
+                <button class="main-button btn-start" id="main-button" onclick="handleMainButton()">
+                    Start Scanning
+                </button>
 
-        <div class="instructions">
-            <h3>How to Use</h3>
-            <ol>
-                <li>Position your camera/phone overhead pointing at the book</li>
-                <li>Click "Start Scanning"</li>
-                <li>Turn pages - the app captures automatically when the page settles</li>
-                <li>Images save to the sessions folder for OCR processing</li>
-            </ol>
+                <div class="secondary-actions">
+                    <a href="#" onclick="toggleSettings(); return false;">⚙ Settings</a>
+                    <a href="#" onclick="newSession(); return false;">+ New Session</a>
+                </div>
+            </div>
+
+            <!-- Settings (hidden by default) -->
+            <div class="settings-panel" id="settings-panel">
+                <h3>Settings</h3>
+                <div class="setting-row">
+                    <label>Sensitivity</label>
+                    <input type="range" id="sensitivity" min="1" max="10" value="5" onchange="updateSensitivity(this.value)">
+                    <span class="value" id="sensitivity-val">5</span>
+                </div>
+                <div class="setting-row">
+                    <label>Capture Delay</label>
+                    <input type="range" id="stability-delay" min="0.3" max="3" step="0.1" value="1.0" onchange="updateDelay(this.value)">
+                    <span class="value" id="stability-delay-val">1.0s</span>
+                </div>
+                <div class="setting-row">
+                    <label>Camera</label>
+                    <select id="camera-select" onchange="switchCamera(this.value)">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Results (shown after OCR complete) -->
+            <div class="results-panel" id="results-panel">
+                <div class="results-icon">✓</div>
+                <div class="results-title" id="results-title">OCR Complete</div>
+                <div class="results-meta" id="results-meta">4 pages processed</div>
+                <div class="results-actions">
+                    <button class="results-btn" onclick="scanMore()">Scan More</button>
+                    <a class="results-btn primary" id="download-link" href="#" target="_blank">Download Markdown</a>
+                </div>
+            </div>
         </div>
     </div>
-    
+
     <script>
+        // App state
+        let appState = 'idle'; // idle, scanning, processing, done
         let isDetecting = false;
-        let lastOcrState = null;
-        
-        // Load available cameras on page load
-        function loadCameras() {
-            fetch('/list_cameras')
-                .then(r => r.json())
-                .then(data => {
-                    const select = document.getElementById('camera-select');
-                    select.innerHTML = data.cameras.map(i => 
-                        `<option value="${i}" ${i === data.current ? 'selected' : ''}>Camera ${i}</option>`
-                    ).join('');
-                });
-        }
-        
-        function loadSessions() {
-            fetch('/list_sessions')
-                .then(r => r.json())
-                .then(data => {
-                    const select = document.getElementById('session-select');
-                    select.innerHTML = '<option value="">Select Session...</option>' + 
-                        data.sessions.map(s => 
-                            `<option value="${s.name}" ${s.name === data.current ? 'selected' : ''}>${s.name} (${s.image_count} pages${s.has_ocr ? ', OCR done' : ''})</option>`
-                        ).join('');
-                });
-        }
-        
-        function loadSession(name) {
-            if (!name) return;
-            document.getElementById('session-name').textContent = name;
-        }
-        
-        function runOCR() {
-            const sessionSelect = document.getElementById('session-select');
-            const sessionName = sessionSelect.value || document.getElementById('session-name').textContent;
-            
-            if (!sessionName) {
-                alert('No session selected');
-                return;
+        let captureCount = 0;
+        let ocrOutputUrl = null;
+
+        // State machine: what the main button does
+        function handleMainButton() {
+            switch(appState) {
+                case 'idle':
+                    startScanning();
+                    break;
+                case 'scanning':
+                    stopAndProcess();
+                    break;
+                case 'processing':
+                    // Button is disabled during processing
+                    break;
+                case 'done':
+                    scanMore();
+                    break;
             }
-            
-            const btn = document.getElementById('ocr-btn');
-            btn.textContent = 'Starting OCR...';
-            btn.disabled = true;
-            
+        }
+
+        function startScanning() {
+            fetch('/toggle_detection', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    if (data.active) {
+                        isDetecting = true;
+                        setAppState('scanning');
+                    }
+                });
+        }
+
+        function stopAndProcess() {
+            // First stop scanning
+            fetch('/toggle_detection', {method: 'POST'})
+                .then(r => r.json())
+                .then(() => {
+                    isDetecting = false;
+                    // Now run OCR
+                    if (captureCount > 0) {
+                        setAppState('processing');
+                        runOCR();
+                    } else {
+                        setAppState('idle');
+                    }
+                });
+        }
+
+        function runOCR() {
+            const sessionName = document.getElementById('session-name').textContent;
+
             fetch('/run_ocr', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -656,85 +1242,124 @@ HTML_TEMPLATE = '''
             })
             .then(r => r.json())
             .then(data => {
-                btn.textContent = 'Run OCR';
-                btn.disabled = false;
                 if (data.error) {
-                    alert('OCR Error: ' + data.error);
-                } else {
-                    lastOcrState = null; // Let status poll handle updates
+                    document.getElementById('status-text').textContent = 'OCR Error: ' + data.error;
+                    document.getElementById('status-text').className = 'status-text error';
+                    setAppState('idle');
                 }
+                // OCR started - status polling will track progress
             })
             .catch(err => {
-                btn.textContent = 'Run OCR';
-                btn.disabled = false;
-                alert('OCR failed: ' + err);
+                document.getElementById('status-text').textContent = 'OCR failed';
+                document.getElementById('status-text').className = 'status-text error';
+                setAppState('idle');
             });
         }
 
-        loadCameras();
-        loadSessions();
-        
-        function switchCamera(index) {
-            if (index === '') return;
-            fetch('/set_camera', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({camera: index})
-            }).then(() => {
-                // Reset button state
-                isDetecting = false;
-                const btn = document.getElementById('toggle-btn');
-                btn.textContent = 'Start Scanning';
-                btn.classList.remove('active');
-                // Reload video feed
-                document.getElementById('video-feed').src = '/video_feed?' + Date.now();
-            });
-        }
-        
-        function toggleDetection() {
-            fetch('/toggle_detection', {method: 'POST'})
-                .then(r => r.json())
-                .then(data => {
-                    isDetecting = data.active;
-                    const btn = document.getElementById('toggle-btn');
-                    btn.textContent = isDetecting ? 'Stop Scanning' : 'Start Scanning';
-                    btn.classList.toggle('active', isDetecting);
-                    if (isDetecting) {
-                        // Reset OCR UI when starting new scan
-                        lastOcrState = null;
-                        document.getElementById('ocr-status').textContent = 'Idle';
-                        document.getElementById('ocr-progress-row').style.display = 'none';
-                        document.getElementById('ocr-output-row').style.display = 'none';
-                    }
-                });
-        }
-        
-        function newSession() {
+        function scanMore() {
             fetch('/new_session', {method: 'POST'})
                 .then(r => r.json())
                 .then(data => {
                     document.getElementById('session-name').textContent = data.session_name;
                     document.getElementById('output-dir').textContent = data.output_dir;
-                    document.getElementById('capture-count').textContent = '0';
-                    // Reset button state since detection was stopped
-                    isDetecting = false;
-                    const btn = document.getElementById('toggle-btn');
-                    btn.textContent = 'Start Scanning';
-                    btn.classList.remove('active');
-                    lastOcrState = null;
-                    document.getElementById('ocr-status').textContent = 'Idle';
-                    document.getElementById('ocr-progress-row').style.display = 'none';
-                    document.getElementById('ocr-output-row').style.display = 'none';
+                    captureCount = 0;
+                    ocrOutputUrl = null;
+                    setAppState('idle');
                 });
         }
-        
+
+        function newSession() {
+            if (isDetecting) {
+                fetch('/toggle_detection', {method: 'POST'}).then(() => {
+                    isDetecting = false;
+                    scanMore();
+                });
+            } else {
+                scanMore();
+            }
+        }
+
+        function setAppState(state) {
+            appState = state;
+            const btn = document.getElementById('main-button');
+            const controlsArea = document.getElementById('controls-area');
+            const resultsPanel = document.getElementById('results-panel');
+            const statusText = document.getElementById('status-text');
+
+            // Reset
+            controlsArea.style.display = 'flex';
+            resultsPanel.classList.remove('visible');
+            btn.disabled = false;
+
+            switch(state) {
+                case 'idle':
+                    btn.className = 'main-button btn-start';
+                    btn.textContent = 'Start Scanning';
+                    statusText.textContent = 'Ready to scan';
+                    statusText.className = 'status-text';
+                    break;
+
+                case 'scanning':
+                    btn.className = 'main-button btn-stop';
+                    btn.textContent = 'Stop & Process';
+                    statusText.textContent = 'Scanning...';
+                    statusText.className = 'status-text scanning';
+                    break;
+
+                case 'processing':
+                    btn.className = 'main-button btn-processing';
+                    btn.textContent = 'Processing OCR...';
+                    btn.disabled = true;
+                    statusText.textContent = 'Running OCR...';
+                    statusText.className = 'status-text processing';
+                    break;
+
+                case 'done':
+                    controlsArea.style.display = 'none';
+                    resultsPanel.classList.add('visible');
+                    statusText.textContent = 'Complete';
+                    statusText.className = 'status-text';
+                    document.getElementById('results-meta').textContent = captureCount + ' pages processed';
+                    if (ocrOutputUrl) {
+                        document.getElementById('download-link').href = ocrOutputUrl;
+                    }
+                    break;
+            }
+        }
+
+        function toggleSettings() {
+            document.getElementById('settings-panel').classList.toggle('visible');
+        }
+
+        function loadCameras() {
+            fetch('/list_cameras')
+                .then(r => r.json())
+                .then(data => {
+                    const select = document.getElementById('camera-select');
+                    select.innerHTML = data.cameras.map(i =>
+                        `<option value="${i}" ${i === data.current ? 'selected' : ''}>Camera ${i}</option>`
+                    ).join('');
+                });
+        }
+
+        function switchCamera(index) {
+            if (index === '') return;
+            fetch('/set_camera', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({camera: parseInt(index)})
+            }).then(() => {
+                isDetecting = false;
+                setAppState('idle');
+                document.getElementById('video-feed').src = '/video_feed?' + Date.now();
+            });
+        }
+
         function updateSensitivity(value) {
             document.getElementById('sensitivity-val').textContent = value;
-            // Convert 1-10 scale to thresholds (inverted: higher sensitivity = lower threshold)
-            // Based on observed values: motion ~10, still ~0.4
-            const motionThreshold = 11 - value;  // 10 down to 1
-            const stabilityThreshold = 2.2 - (value * 0.2);  // 2.0 down to 0.2
-            
+            const motionThreshold = 11 - value;
+            const stabilityThreshold = 2.2 - (value * 0.2);
+
             fetch('/update_setting', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -746,7 +1371,7 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify({name: 'stability_threshold', value: stabilityThreshold})
             });
         }
-        
+
         function updateDelay(value) {
             document.getElementById('stability-delay-val').textContent = value + 's';
             fetch('/update_setting', {
@@ -755,79 +1380,83 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify({name: 'stability_delay', value: parseFloat(value)})
             });
         }
-        
-        function updateOcrUI(ocr) {
-            const statusEl = document.getElementById('ocr-status');
-            const progressRow = document.getElementById('ocr-progress-row');
-            const progressText = document.getElementById('ocr-progress');
-            const outputRow = document.getElementById('ocr-output-row');
-            const outputLink = document.getElementById('ocr-output-link');
-            const ocrBtn = document.getElementById('ocr-btn');
 
-            if (!ocr) return;
-
-            let statusText = 'Idle';
-            if (ocr.state === 'running') statusText = 'Running...';
-            else if (ocr.state === 'complete') statusText = 'Complete';
-            else if (ocr.state === 'error') statusText = 'Error: ' + (ocr.error || 'Unknown');
-            statusEl.textContent = statusText;
-
-            if (ocr.state === 'running') {
-                progressRow.style.display = 'flex';
-                const total = ocr.total || 0;
-                const completed = ocr.completed || 0;
-                const current = ocr.current_page ? ` (${ocr.current_page})` : '';
-                progressText.textContent = total ? `${completed}/${total} pages${current}` : 'Preparing...';
-                outputRow.style.display = 'none';
-            } else if (ocr.state === 'complete' && ocr.output_url) {
-                progressRow.style.display = 'none';
-                outputRow.style.display = 'flex';
-                outputLink.href = ocr.output_url;
-                outputLink.textContent = 'Open OCR markdown';
-            } else {
-                progressRow.style.display = 'none';
-                outputRow.style.display = 'none';
-            }
-
-            if (ocrBtn) {
-                ocrBtn.disabled = ocr.state === 'running';
-                ocrBtn.textContent = ocr.state === 'running' ? 'OCR in progress...' : 'Run OCR';
-            }
-        }
-        
         // Poll for status updates
         let lastCount = 0;
         setInterval(() => {
             fetch('/status')
                 .then(r => r.json())
                 .then(data => {
-                    document.getElementById('capture-count').textContent = data.capture_count;
-                    document.getElementById('current-state').textContent = data.state;
-                    document.getElementById('delta-display').textContent = 
-                        data.delta + ' (trigger: >' + data.motion_threshold + ', stable: <' + data.stability_threshold + ')';
-                    
+                    captureCount = data.capture_count;
+                    document.getElementById('page-count').textContent = captureCount + ' page' + (captureCount !== 1 ? 's' : '');
+
+                    // Motion bar
+                    const motionLevel = document.getElementById('motion-level');
+                    const normalizedMotion = Math.min(100, (data.delta / 10) * 100);
+                    motionLevel.style.height = normalizedMotion + '%';
+                    motionLevel.classList.toggle('high', data.delta > data.motion_threshold);
+
+                    // Update status text during scanning
+                    if (appState === 'scanning') {
+                        if (data.state === 'PAGE_TURNING') {
+                            document.getElementById('status-text').textContent = 'Page turning...';
+                            document.getElementById('status-text').className = 'status-text turning';
+                        } else if (data.state === 'STABILIZING') {
+                            document.getElementById('status-text').textContent = 'Stabilizing...';
+                            document.getElementById('status-text').className = 'status-text turning';
+                        } else {
+                            document.getElementById('status-text').textContent = 'Scanning...';
+                            document.getElementById('status-text').className = 'status-text scanning';
+                        }
+                    }
+
                     // Flash and sound on new capture
                     if (data.capture_count > lastCount) {
                         const flash = document.getElementById('capture-flash');
                         flash.style.display = 'block';
                         setTimeout(() => flash.style.display = 'none', 200);
-                        
-                        // Try to play sound
-                        try {
-                            document.getElementById('capture-sound').play();
-                        } catch(e) {}
+                        try { document.getElementById('capture-sound').play(); } catch(e) {}
+
+                        // Brief "Captured!" message
+                        if (appState === 'scanning') {
+                            document.getElementById('status-text').textContent = 'Captured!';
+                            setTimeout(() => {
+                                if (appState === 'scanning') {
+                                    document.getElementById('status-text').textContent = 'Scanning...';
+                                    document.getElementById('status-text').className = 'status-text scanning';
+                                }
+                            }, 1000);
+                        }
                     }
                     lastCount = data.capture_count;
-                    
+
+                    // Handle OCR status
                     if (data.ocr) {
-                        updateOcrUI(data.ocr);
-                        if (lastOcrState !== 'complete' && data.ocr.state === 'complete') {
-                            loadSessions();
+                        if (data.ocr.state === 'running' && appState === 'processing') {
+                            const total = data.ocr.total || 0;
+                            const completed = data.ocr.completed || 0;
+                            if (total > 0) {
+                                document.getElementById('status-text').textContent =
+                                    `OCR: ${completed}/${total} pages...`;
+                            }
+                        } else if (data.ocr.state === 'complete') {
+                            if (appState === 'processing') {
+                                ocrOutputUrl = data.ocr.output_url;
+                                setAppState('done');
+                            }
+                        } else if (data.ocr.state === 'error' && appState === 'processing') {
+                            document.getElementById('status-text').textContent =
+                                'OCR Error: ' + (data.ocr.error || 'Unknown');
+                            document.getElementById('status-text').className = 'status-text error';
+                            setAppState('idle');
                         }
-                        lastOcrState = data.ocr.state;
                     }
                 });
         }, 500);
+
+        // Initialize
+        loadCameras();
+        setAppState('idle');
     </script>
 </body>
 </html>
@@ -835,8 +1464,21 @@ HTML_TEMPLATE = '''
 
 
 @app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE, 
+def landing():
+    """Landing page with two routes: Upload or Camera."""
+    return render_template_string(LANDING_PAGE)
+
+
+@app.route('/upload')
+def upload_page():
+    """PDF upload page."""
+    return render_template_string(UPLOAD_PAGE)
+
+
+@app.route('/camera')
+def camera_page():
+    """Camera scanning page (PageSnap)."""
+    return render_template_string(HTML_TEMPLATE,
                                   session_name=page_snap.session_name,
                                   output_dir=page_snap.output_dir,
                                   current_camera=page_snap.camera_index)
@@ -1047,6 +1689,92 @@ def download_pdf(session_name):
         return jsonify({'error': 'PDF not found. Export first.'}), 404
 
     return send_file(pdf_path, as_attachment=True, download_name=f"{session_name}.pdf")
+
+
+# ============================================================================
+# PDF Upload API
+# ============================================================================
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    """Upload a PDF for OCR processing."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Only PDF files are supported'}), 400
+
+    # Save file
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(pdf_manager.upload_dir, f"{uuid.uuid4().hex[:8]}_{filename}")
+    file.save(file_path)
+
+    # Get page count
+    try:
+        from pdf_pipeline import get_pdf_info
+        pdf_info = get_pdf_info(file_path)
+        page_count = pdf_info['page_count']
+    except Exception as e:
+        os.remove(file_path)
+        return jsonify({'error': f'Invalid PDF: {e}'}), 400
+
+    # Create job
+    job_id = pdf_manager.create_job(filename, file_path, page_count)
+
+    return jsonify({
+        'ok': True,
+        'job_id': job_id,
+        'filename': filename,
+        'page_count': page_count
+    })
+
+
+@app.route('/api/jobs')
+def api_list_jobs():
+    """List all PDF processing jobs."""
+    return jsonify({'jobs': pdf_manager.list_jobs()})
+
+
+@app.route('/api/jobs/<job_id>')
+def api_get_job(job_id):
+    """Get status of a specific job."""
+    job = pdf_manager.get_job(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(job)
+
+
+@app.route('/api/jobs/<job_id>/start', methods=['POST'])
+def api_start_job(job_id):
+    """Start processing a PDF job."""
+    success, error = pdf_manager.start_processing(job_id)
+    if not success:
+        return jsonify({'error': error}), 400
+    return jsonify({'ok': True})
+
+
+@app.route('/api/jobs/<job_id>/download')
+def api_download_job(job_id):
+    """Download the OCR output for a completed job."""
+    job = pdf_manager.get_job(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+
+    if job['status'] != 'complete' or not job.get('output_path'):
+        return jsonify({'error': 'Job not complete'}), 400
+
+    if not os.path.exists(job['output_path']):
+        return jsonify({'error': 'Output file not found'}), 404
+
+    return send_file(
+        job['output_path'],
+        as_attachment=True,
+        download_name=f"{Path(job['filename']).stem}_ocr.md"
+    )
 
 
 if __name__ == '__main__':

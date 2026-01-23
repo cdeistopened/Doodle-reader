@@ -19,19 +19,29 @@ except ImportError:
 
 
 def load_env():
-    """Load environment variables from .env file."""
+    """Load environment variables from .env file.
+
+    Note: This OVERRIDES existing environment variables to ensure
+    project-specific keys are used (not stale shell env vars).
+    """
     env_paths = [
         Path(__file__).parent / ".env",
+        Path(__file__).parent.parent / ".env",  # Parent doodle-reader folder
         Path.cwd() / ".env",
     ]
     for env_path in env_paths:
+        # Resolve symlinks
+        if env_path.is_symlink():
+            env_path = env_path.resolve()
         if env_path.exists():
+            print(f"Loading env from: {env_path}")
             with open(env_path) as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, value = line.split("=", 1)
-                        os.environ.setdefault(key.strip(), value.strip())
+                        # Override existing env vars with project .env
+                        os.environ[key.strip()] = value.strip()
             break
 
 

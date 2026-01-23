@@ -424,4 +424,77 @@ export default defineSchema({
     .index("by_board_order", ["boardId", "sortOrder"])
     .index("by_document", ["documentId"])
     .index("by_user", ["userId"]),
+
+  // ---------------------------------------------------------------------------
+  // SCAN JOBS (Doodle Scanner / Doodle OCR)
+  // ---------------------------------------------------------------------------
+  scanJobs: defineTable({
+    // Multi-tenant
+    userId: v.string(),
+
+    // Job status
+    status: v.union(
+      v.literal("pending"),      // Waiting to start
+      v.literal("analyzing"),    // Pre-flight analysis
+      v.literal("ready"),        // Analysis complete, awaiting user confirmation
+      v.literal("processing"),   // OCR in progress
+      v.literal("complete"),     // Done
+      v.literal("failed")        // Error
+    ),
+
+    // Input source
+    sourceType: v.union(
+      v.literal("upload"),       // User uploaded PDF
+      v.literal("camera")        // Captured via PageSnap/Doodle Scanner
+    ),
+    fileName: v.string(),
+    pageCount: v.number(),
+
+    // Storage references
+    inputFileId: v.optional(v.id("_storage")),    // Convex file storage for input PDF
+    outputFileId: v.optional(v.id("_storage")),   // Convex file storage for output markdown
+
+    // Pre-flight analysis results
+    analysis: v.optional(v.object({
+      documentType: v.string(),           // "book", "article", "manuscript", etc.
+      language: v.string(),               // "english", "latin", "mixed", etc.
+      hasFootnotes: v.boolean(),
+      hasTwoColumns: v.boolean(),
+      estimatedWordsPerPage: v.number(),
+      recommendedChunkSize: v.number(),
+      notes: v.optional(v.string()),
+    })),
+
+    // User preferences (set after analysis)
+    preferences: v.optional(v.object({
+      keepFrontMatter: v.boolean(),
+      skipGoogleNotice: v.boolean(),
+      includePageMarkers: v.boolean(),
+      includeColumnMarkers: v.boolean(),
+      outputFormat: v.union(v.literal("single"), v.literal("chapters")),
+    })),
+
+    // Processing progress
+    chunksTotal: v.optional(v.number()),
+    chunksComplete: v.optional(v.number()),
+    currentChunk: v.optional(v.string()),   // e.g., "Pages 41-50"
+
+    // Results
+    outputChars: v.optional(v.number()),
+    processingTimeMs: v.optional(v.number()),
+    creditsUsed: v.optional(v.number()),
+
+    // Error tracking
+    errorMessage: v.optional(v.string()),
+    errorChunk: v.optional(v.number()),
+
+    // Timestamps
+    createdAt: v.number(),
+    analyzedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_created", ["userId", "createdAt"]),
 });

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PageSnap UX Mockup - Simplified</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a1a;
+            --ink-soft: #3d3d3d;
+            --ink-muted: #6b6b6b;
+            --cream: #faf8f5;
+            --cream-warm: #f5f2ed;
+            --surface: #ffffff;
+            --border: #d4d0c8;
+            --accent: #4f46e5;
+            --accent-soft: #e0e7ff;
+            --success: #16a34a;
+            --error: #dc2626;
+            --warning: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--cream);
+            color: var(--ink);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        .mockup-label {
+            background: var(--warning);
+            color: white;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .subtitle { color: var(--ink-muted); margin-bottom: 32px; }
+
+        .state-switcher {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .state-btn {
+            padding: 8px 16px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .state-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* === THE MOCKUP === */
+        .mockup-frame {
+            background: var(--surface);
+            border: 2px solid var(--ink);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 6px 6px 0 var(--ink);
+        }
+
+        .camera-area {
+            background: #1a1a1a;
+            aspect-ratio: 16/10;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .camera-placeholder {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Status bar overlay on camera */
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.8);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-text {
+            color: #888;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status-text.scanning { color: #4ade80; }
+        .status-text.turning { color: #fbbf24; }
+        .status-text.processing { color: #60a5fa; }
+
+        .page-count {
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'SF Mono', ui-monospace, monospace;
+        }
+
+        /* Motion indicator - subtle bar */
+        .motion-bar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 4px;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .motion-level {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: #4ade80;
+            border-radius: 2px;
+            transition: height 0.2s;
+        }
+
+        /* Controls area */
+        .controls-area {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .main-button {
+            width: 100%;
+            max-width: 320px;
+            padding: 18px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border: 2px solid var(--ink);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: 'Inter', sans-serif;
+            box-shadow: 3px 3px 0 var(--ink);
+        }
+        .main-button:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 5px 5px 0 var(--ink);
+        }
+        .main-button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0 var(--ink);
+        }
+
+        .btn-start { background: var(--accent); color: white; }
+        .btn-stop { background: var(--error); color: white; }
+        .btn-processing {
+            background: var(--ink-muted);
+            color: white;
+            cursor: wait;
+            opacity: 0.7;
+        }
+        .btn-done { background: var(--success); color: white; }
+
+        .secondary-actions {
+            display: flex;
+            gap: 16px;
+            font-size: 14px;
+        }
+        .secondary-actions a {
+            color: var(--ink-muted);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .secondary-actions a:hover { color: var(--accent); }
+
+        /* Settings panel (hidden by default) */
+        .settings-panel {
+            display: none;
+            background: var(--cream-warm);
+            padding: 20px 24px;
+            border-top: 1px solid var(--border);
+        }
+        .settings-panel.visible { display: block; }
+        .settings-panel h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--ink-soft);
+        }
+        .setting-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .setting-row label {
+            width: 120px;
+            font-size: 13px;
+        }
+        .setting-row input[type="range"] {
+            flex: 1;
+            margin: 0 12px;
+            accent-color: var(--accent);
+        }
+        .setting-row .value {
+            width: 40px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* Results panel */
+        .results-panel {
+            display: none;
+            padding: 24px;
+            text-align: center;
+        }
+        .results-panel.visible { display: block; }
+        .results-icon { font-size: 48px; margin-bottom: 12px; }
+        .results-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+        .results-meta { color: var(--ink-muted); font-size: 14px; margin-bottom: 20px; }
+        .results-actions { display: flex; gap: 12px; justify-content: center; }
+        .results-btn {
+            padding: 10px 20px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            background: var(--surface);
+        }
+        .results-btn.primary {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* State descriptions */
+        .state-description {
+            margin-top: 32px;
+            padding: 20px;
+            background: var(--accent-soft);
+            border-radius: 8px;
+        }
+        .state-description h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+        .state-description p {
+            font-size: 13px;
+            color: var(--ink-soft);
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="mockup-label">UX MOCKUP - Click states to preview</span>
+        <h1>Doodle Scanner - Camera</h1>
+        <p class="subtitle">Simplified single-button interface</p>
+
+        <div class="state-switcher">
+            <button class="state-btn active" onclick="setState('idle')">1. Idle</button>
+            <button class="state-btn" onclick="setState('scanning')">2. Scanning</button>
+            <button class="state-btn" onclick="setState('processing')">3. Processing</button>
+            <button class="state-btn" onclick="setState('done')">4. Done</button>
+            <button class="state-btn" onclick="toggleSettings()">Toggle Settings</button>
+        </div>
+
+        <div class="mockup-frame">
+            <div class="camera-area">
+                <div class="camera-placeholder">[Camera Feed]</div>
+
+                <!-- Subtle motion indicator -->
+                <div class="motion-bar">
+                    <div class="motion-level" id="motion-level" style="height: 20%"></div>
+                </div>
+
+                <!-- Status overlay -->
+                <div class="status-bar">
+                    <span class="status-text" id="status-text">Ready to scan</span>
+                    <span class="page-count" id="page-count">0 pages</span>
+                </div>
+            </div>
+
+            <!-- Main controls -->
+            <div class="controls-area" id="controls-area">
+                <button class="main-button btn-start" id="main-button">
+                    Start Scanning
+                </button>
+
+                <div class="secondary-actions">
+                    <a href="#" onclick="toggleSettings(); return false;">Settings</a>
+                    <a href="#">Sessions</a>
+                </div>
+            </div>
+
+            <!-- Settings (hidden by default) -->
+            <div class="settings-panel" id="settings-panel">
+                <h3>Settings</h3>
+                <div class="setting-row">
+                    <label>Sensitivity</label>
+                    <input type="range" min="1" max="10" value="5">
+                    <span class="value">5</span>
+                </div>
+                <div class="setting-row">
+                    <label>Capture Delay</label>
+                    <input type="range" min="0.3" max="3" step="0.1" value="1">
+                    <span class="value">1.0s</span>
+                </div>
+                <div class="setting-row">
+                    <label>Camera</label>
+                    <select style="flex:1; margin: 0 12px; padding: 6px;">
+                        <option>Camera 0 (Built-in)</option>
+                        <option>Camera 1 (External)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Results (shown after processing) -->
+            <div class="results-panel" id="results-panel">
+                <div class="results-icon">✓</div>
+                <div class="results-title">OCR Complete</div>
+                <div class="results-meta">4 pages processed in 12 seconds</div>
+                <div class="results-actions">
+                    <button class="results-btn" onclick="setState('idle')">Scan More</button>
+                    <button class="results-btn primary">Download Markdown</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="state-description" id="state-description">
+            <h3>State: Idle</h3>
+            <p>User sees "Start Scanning" button. Camera preview is live. Settings accessible via link below button.</p>
+        </div>
+    </div>
+
+    <script>
+        const descriptions = {
+            idle: {
+                title: 'State: Idle',
+                text: 'User sees "Start Scanning" button. Camera preview is live. Settings accessible via link below button. Page count shows 0.'
+            },
+            scanning: {
+                title: 'State: Scanning',
+                text: 'Button changes to red "Stop & Process". Status shows "Scanning..." or "Page turning..." or "Captured!". Page count increments. Motion bar shows activity level.'
+            },
+            processing: {
+                title: 'State: Processing',
+                text: 'Button is disabled, shows "Processing OCR...". Status shows progress. User waits for completion.'
+            },
+            done: {
+                title: 'State: Done',
+                text: 'Results panel appears with success message. Two buttons: "Scan More" (resets to idle) and "Download Markdown" (gets the file).'
+            }
+        };
+
+        function setState(state) {
+            // Update state buttons
+            document.querySelectorAll('.state-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', btn.textContent.includes(state.charAt(0).toUpperCase() + state.slice(1)) ||
+                    (state === 'idle' && i === 0) ||
+                    (state === 'scanning' && i === 1) ||
+                    (state === 'processing' && i === 2) ||
+                    (state === 'done' && i === 3));
+            });
+
+            const mainBtn = document.getElementById('main-button');
+            const statusText = document.getElementById('status-text');
+            const pageCount = document.getElementById('page-count');
+            const motionLevel = document.getElementById('motion-level');
+            const controlsArea = document.getElementById('controls-area');
+            const resultsPanel = document.getElementById('results-panel');
+            const desc = document.getElementById('state-description');
+
+            // Reset
+            controlsArea.style.display = 'flex';
+            resultsPanel.classList.remove('visible');
+
+            switch(state) {
+                case 'idle':
+                    mainBtn.className = 'main-button btn-start';
+                    mainBtn.textContent = 'Start Scanning';
+                    statusText.className = 'status-text';
+                    statusText.textContent = 'Ready to scan';
+                    pageCount.textContent = '0 pages';
+                    motionLevel.style.height = '20%';
+                    break;
+
+                case 'scanning':
+                    mainBtn.className = 'main-button btn-stop';
+                    mainBtn.textContent = 'Stop & Process';
+                    statusText.className = 'status-text scanning';
+                    statusText.textContent = 'Scanning...';
+                    pageCount.textContent = '4 pages';
+                    motionLevel.style.height = '60%';
+                    // Simulate motion
+                    setInterval(() => {
+                        if (document.querySelector('.state-btn:nth-child(2)').classList.contains('active')) {
+                            motionLevel.style.height = (20 + Math.random() * 60) + '%';
+                        }
+                    }, 500);
+                    break;
+
+                case 'processing':
+                    mainBtn.className = 'main-button btn-processing';
+                    mainBtn.textContent = 'Processing OCR...';
+                    statusText.className = 'status-text processing';
+                    statusText.textContent = 'OCR: 2/4 pages...';
+                    pageCount.textContent = '4 pages';
+                    motionLevel.style.height = '0%';
+                    break;
+
+                case 'done':
+                    controlsArea.style.display = 'none';
+                    resultsPanel.classList.add('visible');
+                    statusText.className = 'status-text';
+                    statusText.textContent = 'Complete';
+                    break;
+            }
+
+            desc.querySelector('h3').textContent = descriptions[state].title;
+            desc.querySelector('p').textContent = descriptions[state].text;
+        }
+
+        function toggleSettings() {
+            document.getElementById('settings-panel').classList.toggle('visible');
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
-import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Search, Sparkles, Menu } from 'lucide-react';
+import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Search, Sparkles, Menu, ExternalLink } from 'lucide-react';
+
+// Scanner service URL - defaults to production
+const SCANNER_URL = import.meta.env.VITE_PAGESNAP_URL || 'https://scanner.doodlereader.com';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 import { UsageSummary } from './UpgradePrompt';
 import { BoardsPanel } from './BoardsPanel';
@@ -206,14 +209,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="font-medium text-sm">Add Feed</span>
           </button>
 
+          {/* Scan + OCR - Opens scanner service */}
+          <a
+            href={SCANNER_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full bg-ink hover:bg-ink-soft text-white transition-all rounded-md h-10 md:h-10 min-h-[44px] flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+          >
+            <ScanLine size={18} strokeWidth={2} />
+            <span className="font-medium text-sm">Scan + OCR</span>
+            <ExternalLink size={12} strokeWidth={2} className="opacity-60" />
+          </a>
+
           <div className="flex gap-2">
             {onScanPdf && (
               <button
                 onClick={handleScanPdf}
                 className="flex-1 bg-surface hover:bg-cream text-ink transition-all rounded-md min-h-[44px] md:h-9 flex items-center justify-center space-x-1.5 border-2 border-border hover:border-ink"
+                title="Quick PDF scan (local)"
               >
                 <ScanLine size={14} strokeWidth={1.5} />
-                <span className="font-medium text-xs">PDF</span>
+                <span className="font-medium text-xs">Quick PDF</span>
               </button>
             )}
             {onFolderScan && (
