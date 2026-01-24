@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksPlan]
+providers = ["python"]
+
+[deploy]
+startCommand = "python web_app.py --port $PORT"
+healthcheckPath = "/"
+healthcheckTimeout = 100
