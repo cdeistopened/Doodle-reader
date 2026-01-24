@@ -8,9 +8,8 @@ Two routes:
 
 Part of Doodle Reader ecosystem.
 """
+from __future__ import annotations
 
-import cv2
-import numpy as np
 import time
 import os
 import json
@@ -24,6 +23,19 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 from flask import Flask, render_template_string, Response, jsonify, request, send_file, url_for
 from werkzeug.utils import secure_filename
+
+# OpenCV is optional - only needed for camera capture (local use)
+try:
+    import cv2
+    import numpy as np
+    CAMERA_AVAILABLE = True
+except ImportError:
+    CAMERA_AVAILABLE = False
+    # Create stub module with ndarray type for annotations
+    class _NumpyStub:
+        ndarray = type(None)  # Stub type for annotations
+    np = _NumpyStub()
+    cv2 = None
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
@@ -295,7 +307,8 @@ class PageSnapApp:
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
 
-page_snap = PageSnapApp(camera_index=0)
+# Only initialize camera app if OpenCV is available
+page_snap = PageSnapApp(camera_index=0) if CAMERA_AVAILABLE else None
 
 
 # ============================================================================
@@ -1478,6 +1491,15 @@ def upload_page():
 @app.route('/camera')
 def camera_page():
     """Camera scanning page (PageSnap)."""
+    if not CAMERA_AVAILABLE:
+        return render_template_string('''
+        <!DOCTYPE html><html><head><title>Camera Not Available</title></head>
+        <body style="font-family: sans-serif; padding: 40px; text-align: center;">
+            <h1>Camera Mode Not Available</h1>
+            <p>Camera scanning requires OpenCV which is only available when running locally.</p>
+            <p><a href="/upload">Use PDF Upload instead →</a></p>
+        </body></html>
+        ''')
     return render_template_string(HTML_TEMPLATE,
                                   session_name=page_snap.session_name,
                                   output_dir=page_snap.output_dir,
@@ -1486,6 +1508,8 @@ def camera_page():
 
 @app.route('/list_cameras')
 def list_cameras():
+    if not CAMERA_AVAILABLE:
+        return jsonify({'cameras': [], 'current': 0, 'error': 'Camera not available'})
     cameras = []
     for i in range(5):
         cap = cv2.VideoCapture(i, cv2.CAP_AVFOUNDATION)
@@ -1780,19 +1804,22 @@ def api_download_job(job_id):
 if __name__ == '__main__':
     import argparse
     import os
-    
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--camera', type=int, default=0)
     parser.add_argument('-p', '--port', type=int, default=int(os.environ.get('PORT', 5001)))
     args = parser.parse_args()
-    
-    page_snap.camera_index = args.camera
-    print(f"\nPageSnap Web")
-    print(f"============")
-    print(f"Camera: {args.camera}")
+
+    print(f"\nDoodle Scanner")
+    print(f"==============")
+    if CAMERA_AVAILABLE and page_snap:
+        page_snap.camera_index = args.camera
+        print(f"Camera: {args.camera}")
+    else:
+        print("Camera: Not available (PDF upload only)")
     print(f"Port: {args.port}")
     if args.port == 5001:
         print(f"Open http://localhost:{args.port} in your browser")
     print()
-    
+
     app.run(host='0.0.0.0', port=args.port, debug=False, threaded=True)

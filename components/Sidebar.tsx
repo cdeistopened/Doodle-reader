@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Folder, FeedSource, FilterType, FeedItem } from '../types';
 import { Folder as FolderIcon, Rss, Star, Inbox, Plus, PlaySquare, FileText, X, Trash2, ScanLine, FolderOpen, Search, Sparkles, Menu, ExternalLink } from 'lucide-react';
 
-// Scanner service URL - defaults to production
-const SCANNER_URL = import.meta.env.VITE_PAGESNAP_URL || 'https://scanner.doodlereader.com';
+// Scanner service URL - defaults to production Railway deployment
+const SCANNER_URL = import.meta.env.VITE_PAGESNAP_URL || 'https://scanner-production-1d59.up.railway.app';
 import { fuzzySearchFeeds } from '../lib/feedDiscovery';
 import { UsageSummary } from './UpgradePrompt';
 import { BoardsPanel } from './BoardsPanel';
