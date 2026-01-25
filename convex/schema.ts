@@ -497,4 +497,16 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_user_created", ["userId", "createdAt"]),
+
+  // ---------------------------------------------------------------------------
+  // NEWSLETTER FEEDS (Kill the Newsletter integration)
+  // ---------------------------------------------------------------------------
+  newsletterFeeds: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    email: v.string(),
+    feedUrl: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
 });
