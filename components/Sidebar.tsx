@@ -21,6 +21,7 @@ interface SidebarProps {
   onUnsubscribe?: (feedId: string) => void;
   onScanPdf?: () => void;
   onFolderScan?: () => void;
+  onAddNewsletter?: () => void;
   documentCount?: number;
   isOpen?: boolean;
   onClose?: () => void;
@@ -42,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUnsubscribe,
   onScanPdf,
   onFolderScan,
+  onAddNewsletter,
   documentCount = 0,
   isOpen = true,
   onClose,
@@ -208,6 +210,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Plus size={18} strokeWidth={2} />
             <span className="font-medium text-sm">Add Feed</span>
           </button>
+
+          {/* Add Newsletter */}
+          {onAddNewsletter && (
+            <button
+              onClick={onAddNewsletter}
+              className="w-full bg-paper hover:bg-cream text-ink transition-all rounded-md h-10 md:h-10 min-h-[44px] flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+            >
+              <Rss size={18} strokeWidth={2} />
+              <span className="font-medium text-sm">Add Newsletter</span>
+            </button>
+          )}
 
           {/* Scan + OCR - Opens scanner service */}
           <a

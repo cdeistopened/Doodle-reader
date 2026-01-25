@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { FeedList } from './components/FeedList';
 import { Header } from './components/Header';
 import { SubscribeModal } from './components/SubscribeModal';
+import { AddNewsletterModal } from './components/AddNewsletterModal';
 import { WelcomeState } from './components/WelcomeState';
 import { ScanModal } from './components/ScanModal';
 import { FolderScanModal } from './components/FolderScanModal';
@@ -90,6 +91,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isPricingOpen, setPricingOpen] = useState(false);
+  const [isNewsletterOpen, setNewsletterOpen] = useState(false);
   const [activeBoard, setActiveBoard] = useState<Id<"boards"> | null>(null);
 
   const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
@@ -320,6 +322,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
         onUnsubscribe={(feedId) => unsubscribe(feedId, true)}
         onScanPdf={() => setScanOpen(true)}
         onFolderScan={() => setFolderScanOpen(true)}
+        onAddNewsletter={() => setNewsletterOpen(true)}
         documentCount={documentCount}
         isOpen={isSidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -428,6 +431,11 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
       <PricingModal
         isOpen={isPricingOpen}
         onClose={() => setPricingOpen(false)}
+      />
+
+      <AddNewsletterModal
+        isOpen={isNewsletterOpen}
+        onClose={() => setNewsletterOpen(false)}
       />
     </div>
   );
