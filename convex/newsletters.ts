@@ -94,7 +94,12 @@ export const createNewsletterFeed = action({
   args: {
     name: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    id: string;
+    name: string;
+    email: string;
+    feedUrl: string;
+  }> => {
     // Build form data
     const formData = new URLSearchParams();
     formData.append("title", args.name);
@@ -141,15 +146,15 @@ export const createNewsletterFeed = action({
     }
 
     // Store in database
-    const id = await ctx.runMutation(internal.newsletters.storeNewsletterFeed, {
+    const newId: string = await ctx.runMutation(internal.newsletters.storeNewsletterFeed, {
       userId: identity.subject,
       name: args.name,
       email,
       feedUrl,
-    });
+    }) as string;
 
     return {
-      id,
+      id: newId,
       name: args.name,
       email,
       feedUrl,

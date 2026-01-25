@@ -377,6 +377,7 @@ export default defineSchema({
     period: v.string(),
 
     transcriptions: v.optional(v.number()),
+    transcriptionMinutes: v.optional(v.number()),
     summariesGenerated: v.optional(v.number()),
     pdfPagesScanned: v.optional(v.number()),
 
