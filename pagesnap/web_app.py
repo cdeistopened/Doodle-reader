@@ -333,8 +333,9 @@ class PDFJobManager:
                 'filename': filename,
                 'file_path': file_path,
                 'page_count': page_count,
-                'status': 'pending',  # pending, analyzing, processing, complete, error
+                'status': 'pending',  # pending, analyzing, analyzed, processing, complete, error
                 'analysis': None,
+                'preferences': None,  # User preferences for OCR
                 'progress': 0,
                 'current_chunk': None,
                 'output_path': None,
@@ -363,26 +364,92 @@ class PDFJobManager:
                 reverse=True
             )
 
-    def start_processing(self, job_id: str):
+    def analyze_job(self, job_id: str):
+        """Run pre-flight analysis on a PDF job."""
+        job = self.get_job(job_id)
+        if not job:
+            return False, "Job not found"
+
+        if job['status'] != 'pending':
+            return False, f"Job already {job['status']}"
+
+        def worker():
+            try:
+                from pdf_pipeline import analyze_document, get_api_key, get_pdf_info
+
+                self.update_job(job_id, status='analyzing')
+
+                api_key = get_api_key()
+
+                # Analyze first 20 pages (or all if fewer)
+                sample_pages = min(20, job['page_count'])
+                analysis = analyze_document(api_key, job['file_path'], sample_pages=sample_pages)
+
+                # Calculate cost estimate
+                # Gemini 3 Flash: ~$0.075/1M input, ~$0.30/1M output
+                words_per_page = analysis.get('estimated_words_per_page', 300)
+                total_words = words_per_page * job['page_count']
+                # Rough token estimate: 1 token ≈ 0.75 words for text, plus image tokens
+                input_tokens = job['page_count'] * 1800  # ~1800 tokens per page image
+                output_tokens = int(total_words / 0.75)  # text output
+
+                cost_input = (input_tokens / 1_000_000) * 0.075
+                cost_output = (output_tokens / 1_000_000) * 0.30
+                estimated_cost = round(cost_input + cost_output, 3)
+
+                # Estimate processing time (rough: 3-5 seconds per page)
+                estimated_minutes = round(job['page_count'] * 4 / 60, 1)
+
+                analysis['estimated_cost_usd'] = estimated_cost
+                analysis['estimated_minutes'] = estimated_minutes
+                analysis['sample_pages_analyzed'] = sample_pages
+
+                self.update_job(job_id, status='analyzed', analysis=analysis)
+
+            except Exception as e:
+                self.update_job(job_id, status='error', error=str(e))
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        return True, None
+
+    def start_processing(self, job_id: str, preferences: dict = None):
         """Start processing a PDF job in background thread."""
         job = self.get_job(job_id)
         if not job:
             return False, "Job not found"
 
-        if job['status'] not in ('pending', 'error'):
+        if job['status'] not in ('analyzed', 'pending', 'error'):
             return False, f"Job already {job['status']}"
+
+        # Store preferences if provided
+        if preferences:
+            self.update_job(job_id, preferences=preferences)
+            job['preferences'] = preferences
 
         def worker():
             try:
-                from pdf_pipeline import process_pdf, get_pdf_info, analyze_document, get_gemini_client
+                from pdf_pipeline import process_pdf, get_pdf_info
 
-                self.update_job(job_id, status='analyzing')
+                # Track last activity for watchdog
+                last_activity = [time.time()]
 
                 def progress_callback(completed, total, description):
+                    last_activity[0] = time.time()
                     pct = int(completed / total * 100) if total > 0 else 0
-                    self.update_job(job_id, progress=pct, current_chunk=description)
+                    self.update_job(
+                        job_id,
+                        progress=pct,
+                        current_chunk=description,
+                        last_activity=datetime.now().isoformat()
+                    )
 
-                self.update_job(job_id, status='processing')
+                self.update_job(
+                    job_id,
+                    status='processing',
+                    started_at=datetime.now().isoformat(),
+                    last_activity=datetime.now().isoformat()
+                )
 
                 # Output path
                 output_dir = os.path.join(os.path.dirname(__file__), "output")
@@ -392,22 +459,47 @@ class PDFJobManager:
                 result = process_pdf(
                     job['file_path'],
                     output_path=output_path,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    preferences=job.get('preferences'),
+                    analysis=job.get('analysis'),  # Pass pre-computed analysis
                 )
+
+                # Check for partial failures
+                chunks_failed = result.get('chunks_failed', 0)
+                chunks_total = result.get('chunks_total', 0)
+
+                final_status = 'complete'
+                if chunks_failed > 0:
+                    if chunks_failed == chunks_total:
+                        final_status = 'error'
+                    else:
+                        final_status = 'complete'  # Partial success still counts as complete
 
                 self.update_job(
                     job_id,
-                    status='complete',
+                    status=final_status,
                     output_path=result['output_path'],
                     analysis=result.get('analysis'),
                     total_chars=result.get('total_chars'),
                     total_time=result.get('total_time'),
+                    chunks_total=chunks_total,
+                    chunks_failed=chunks_failed,
                     progress=100,
-                    current_chunk=None
+                    current_chunk=None,
+                    completed_at=datetime.now().isoformat()
                 )
 
             except Exception as e:
-                self.update_job(job_id, status='error', error=str(e))
+                import traceback
+                error_detail = f"{str(e)}\n{traceback.format_exc()}"
+                print(f"[ERROR] Job {job_id} failed: {error_detail}")
+                self.update_job(
+                    job_id,
+                    status='error',
+                    error=str(e),
+                    error_detail=error_detail,
+                    completed_at=datetime.now().isoformat()
+                )
 
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
@@ -582,6 +674,7 @@ UPLOAD_PAGE = '''
             --accent-soft: #e0e7ff;
             --success: #16a34a;
             --error: #dc2626;
+            --warning: #d97706;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -685,10 +778,103 @@ UPLOAD_PAGE = '''
             font-weight: 600;
         }
         .status-pending { background: var(--cream-warm); color: var(--ink-muted); }
-        .status-analyzing, .status-processing { background: var(--accent-soft); color: var(--accent); }
+        .status-analyzing { background: #fef3c7; color: #d97706; }
+        .status-analyzed { background: #dbeafe; color: #2563eb; }
+        .status-processing { background: var(--accent-soft); color: var(--accent); }
         .status-complete { background: #dcfce7; color: var(--success); }
         .status-error { background: #fee2e2; color: var(--error); }
         .job-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+        /* Analysis Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal h2 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .analysis-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .analysis-label { color: var(--ink-muted); font-size: 14px; }
+        .analysis-value { font-weight: 500; }
+        .cost-box {
+            background: var(--accent-soft);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            text-align: center;
+        }
+        .cost-amount {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .cost-label { font-size: 13px; color: var(--ink-muted); }
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 2px solid var(--border);
+            background: var(--surface);
+        }
+        .modal-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        .modal-btn:hover { opacity: 0.9; }
+        .preferences-section {
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+            margin-top: 16px;
+        }
+        .preference-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .preference-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+        }
+        .preference-item .pref-detail {
+            font-size: 12px;
+            color: var(--ink-muted);
+            font-style: italic;
+        }
         .job-btn {
             padding: 6px 12px;
             font-size: 12px;
@@ -742,7 +928,55 @@ UPLOAD_PAGE = '''
         </div>
     </div>
 
+    <!-- Analysis Confirmation Modal -->
+    <div class="modal-overlay" id="analysis-modal">
+        <div class="modal">
+            <h2>📊 Document Analysis</h2>
+            <div id="analysis-content"></div>
+
+            <div class="preferences-section">
+                <h3 style="font-size: 14px; font-weight: 600; margin: 20px 0 12px; color: var(--ink-soft);">Output Preferences</h3>
+
+                <label class="preference-item">
+                    <input type="checkbox" id="pref-strip-headers" checked>
+                    <span>Strip running headers</span>
+                    <span class="pref-detail" id="header-detail"></span>
+                </label>
+
+                <label class="preference-item">
+                    <input type="checkbox" id="pref-strip-footers" checked>
+                    <span>Strip running footers</span>
+                    <span class="pref-detail" id="footer-detail"></span>
+                </label>
+
+                <label class="preference-item">
+                    <input type="checkbox" id="pref-page-breaks">
+                    <span>Include page breaks (---)</span>
+                </label>
+
+                <label class="preference-item">
+                    <input type="checkbox" id="pref-page-numbers">
+                    <span>Include page numbers</span>
+                </label>
+
+                <div style="border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px;">
+                    <label class="preference-item">
+                        <input type="checkbox" id="pref-smooth-boundaries" checked>
+                        <span>AI boundary smoothing</span>
+                        <span class="pref-detail">(fixes broken sentences, removes duplicate headers)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="modal-btn" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="confirmProcessing()">Start Processing</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        let pendingJobId = null;
         const uploadZone = document.getElementById('upload-zone');
 
         // Drag and drop
@@ -786,9 +1020,12 @@ UPLOAD_PAGE = '''
                 if (data.error) {
                     alert('Upload failed: ' + data.error);
                 } else {
-                    // Start processing immediately
-                    fetch('/api/jobs/' + data.job_id + '/start', { method: 'POST' });
+                    // Start analysis instead of processing
+                    pendingJobId = data.job_id;
+                    fetch('/api/jobs/' + data.job_id + '/analyze', { method: 'POST' });
                     refreshJobs();
+                    // Poll for analysis completion
+                    pollForAnalysis(data.job_id);
                 }
             })
             .catch(err => {
@@ -816,21 +1053,37 @@ UPLOAD_PAGE = '''
                         if (job.status === 'complete' && job.output_path) {
                             actions = `<a href="/api/jobs/${job.id}/download" class="job-btn primary">Download</a>`;
                         } else if (job.status === 'pending') {
-                            actions = `<button onclick="startJob('${job.id}')" class="job-btn primary">Start</button>`;
+                            actions = `<button onclick="analyzeJob('${job.id}')" class="job-btn primary">Analyze</button>`;
+                        } else if (job.status === 'analyzed') {
+                            actions = `<button onclick="showAnalysisModal(${JSON.stringify(job).replace(/"/g, '&quot;')})" class="job-btn primary">Review & Start</button>`;
+                        } else if (job.status === 'processing' || job.status === 'analyzing') {
+                            actions = `<button onclick="cancelJob('${job.id}')" class="job-btn" style="color: var(--error);">Cancel</button>`;
                         } else if (job.status === 'error') {
-                            actions = `<button onclick="startJob('${job.id}')" class="job-btn">Retry</button>`;
+                            actions = `<button onclick="retryJob('${job.id}')" class="job-btn">Retry</button>`;
                         }
 
                         let progress = '';
                         if (job.status === 'processing' && job.current_chunk) {
                             progress = `<div class="job-progress">${job.progress}% - ${job.current_chunk}</div>`;
+                        } else if (job.status === 'complete' && job.chunks_failed > 0) {
+                            progress = `<div class="job-progress" style="color: var(--warning);">⚠ ${job.chunks_failed}/${job.chunks_total} chunks failed</div>`;
+                        } else if (job.status === 'error' && job.error) {
+                            progress = `<div class="job-progress" style="color: var(--error);">Error: ${job.error.substring(0, 100)}</div>`;
+                        }
+
+                        let meta = `${job.page_count} pages`;
+                        if (job.analysis && job.analysis.estimated_cost_usd) {
+                            meta += ` • Est. $${job.analysis.estimated_cost_usd.toFixed(3)}`;
+                        }
+                        if (job.analysis && job.analysis.language) {
+                            meta += ` • ${job.analysis.language.charAt(0).toUpperCase() + job.analysis.language.slice(1)}`;
                         }
 
                         return `
                             <li class="job-item">
                                 <div>
                                     <div class="job-name">${job.filename}</div>
-                                    <div class="job-meta">${job.page_count} pages</div>
+                                    <div class="job-meta">${meta}</div>
                                     ${progress}
                                     <div class="job-actions">${actions}</div>
                                 </div>
@@ -844,6 +1097,136 @@ UPLOAD_PAGE = '''
         function startJob(jobId) {
             fetch('/api/jobs/' + jobId + '/start', { method: 'POST' })
                 .then(() => refreshJobs());
+        }
+
+        function cancelJob(jobId) {
+            if (confirm('Cancel this job?')) {
+                fetch('/api/jobs/' + jobId + '/cancel', { method: 'POST' })
+                    .then(() => refreshJobs());
+            }
+        }
+
+        function retryJob(jobId) {
+            fetch('/api/jobs/' + jobId + '/start', { method: 'POST' })
+                .then(() => refreshJobs());
+        }
+
+        function analyzeJob(jobId) {
+            pendingJobId = jobId;
+            fetch('/api/jobs/' + jobId + '/analyze', { method: 'POST' })
+                .then(() => {
+                    refreshJobs();
+                    pollForAnalysis(jobId);
+                });
+        }
+
+        function pollForAnalysis(jobId) {
+            const poll = setInterval(() => {
+                fetch('/api/jobs/' + jobId)
+                    .then(r => r.json())
+                    .then(job => {
+                        if (job.status === 'analyzed' && job.analysis) {
+                            clearInterval(poll);
+                            showAnalysisModal(job);
+                        } else if (job.status === 'error') {
+                            clearInterval(poll);
+                            alert('Analysis failed: ' + job.error);
+                        }
+                    });
+            }, 1000);
+        }
+
+        function showAnalysisModal(job) {
+            pendingJobId = job.id;
+            const a = job.analysis;
+            const content = document.getElementById('analysis-content');
+
+            content.innerHTML = `
+                <div class="analysis-item">
+                    <span class="analysis-label">Document</span>
+                    <span class="analysis-value">${job.filename}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Pages</span>
+                    <span class="analysis-value">${job.page_count}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Type</span>
+                    <span class="analysis-value">${a.document_type || 'Unknown'}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Language</span>
+                    <span class="analysis-value">${(a.language || 'Unknown').charAt(0).toUpperCase() + (a.language || 'unknown').slice(1)}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Two Columns</span>
+                    <span class="analysis-value">${a.has_two_columns ? 'Yes' : 'No'}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Footnotes</span>
+                    <span class="analysis-value">${a.has_footnotes ? 'Yes (' + (a.footnote_style || 'numbered') + ')' : 'No'}</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Est. Processing Time</span>
+                    <span class="analysis-value">~${a.estimated_minutes || '?'} minutes</span>
+                </div>
+
+                <div class="cost-box">
+                    <div class="cost-label">Estimated API Cost</div>
+                    <div class="cost-amount">$${(a.estimated_cost_usd || 0).toFixed(3)}</div>
+                    <div class="cost-label">Based on ${a.sample_pages_analyzed || '?'} sample pages analyzed</div>
+                </div>
+
+                ${a.notes ? `<p style="font-size: 13px; color: var(--ink-muted); margin-top: 12px;"><strong>Notes:</strong> ${a.notes}</p>` : ''}
+            `;
+
+            // Show detected header/footer in preferences
+            const headerDetail = document.getElementById('header-detail');
+            const footerDetail = document.getElementById('footer-detail');
+
+            if (a.running_header_text) {
+                headerDetail.textContent = `"${a.running_header_text}"`;
+            } else if (a.has_headers_footers) {
+                headerDetail.textContent = '(detected)';
+            } else {
+                headerDetail.textContent = '(none detected)';
+            }
+
+            if (a.running_footer_text) {
+                footerDetail.textContent = `"${a.running_footer_text}"`;
+            } else {
+                footerDetail.textContent = '(none detected)';
+            }
+
+            document.getElementById('analysis-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('analysis-modal').classList.remove('active');
+            pendingJobId = null;
+        }
+
+        function confirmProcessing() {
+            if (pendingJobId) {
+                // Collect preferences from checkboxes
+                const preferences = {
+                    strip_headers: document.getElementById('pref-strip-headers').checked,
+                    strip_footers: document.getElementById('pref-strip-footers').checked,
+                    include_page_breaks: document.getElementById('pref-page-breaks').checked,
+                    include_page_numbers: document.getElementById('pref-page-numbers').checked,
+                    smooth_boundaries: document.getElementById('pref-smooth-boundaries').checked,
+                };
+
+                fetch('/api/jobs/' + pendingJobId + '/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ preferences })
+                })
+                    .then(() => {
+                        closeModal();
+                        refreshJobs();
+                    });
+            }
         }
 
         // Poll for updates
@@ -1772,12 +2155,42 @@ def api_get_job(job_id):
     return jsonify(job)
 
 
-@app.route('/api/jobs/<job_id>/start', methods=['POST'])
-def api_start_job(job_id):
-    """Start processing a PDF job."""
-    success, error = pdf_manager.start_processing(job_id)
+@app.route('/api/jobs/<job_id>/analyze', methods=['POST'])
+def api_analyze_job(job_id):
+    """Run pre-flight analysis on a PDF job."""
+    success, error = pdf_manager.analyze_job(job_id)
     if not success:
         return jsonify({'error': error}), 400
+    return jsonify({'ok': True})
+
+
+@app.route('/api/jobs/<job_id>/start', methods=['POST'])
+def api_start_job(job_id):
+    """Start processing a PDF job with optional preferences."""
+    data = request.json or {}
+    preferences = data.get('preferences')
+    success, error = pdf_manager.start_processing(job_id, preferences=preferences)
+    if not success:
+        return jsonify({'error': error}), 400
+    return jsonify({'ok': True})
+
+
+@app.route('/api/jobs/<job_id>/cancel', methods=['POST'])
+def api_cancel_job(job_id):
+    """Cancel a stuck or processing job."""
+    job = pdf_manager.get_job(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+
+    if job['status'] in ('complete', 'error'):
+        return jsonify({'error': f"Job already {job['status']}"}), 400
+
+    pdf_manager.update_job(
+        job_id,
+        status='error',
+        error='Cancelled by user',
+        completed_at=datetime.now().isoformat()
+    )
     return jsonify({'ok': True})
 
 
