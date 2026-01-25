@@ -271,6 +271,9 @@ GENERAL_OCR_PROMPT = GENERAL_OCR_PROMPT_BASE.format(
 
 def clean_output(text: str) -> str:
     """Clean up Gemini output - remove code blocks and artifacts."""
+    if text is None:
+        raise ValueError("Gemini returned empty response (possibly blocked by safety filter)")
+
     cleaned = text.strip()
 
     # Remove markdown code block wrappers
@@ -309,6 +312,22 @@ def _gemini_worker(pdf_bytes: bytes, prompt: str, api_key: str, result_queue):
                 max_output_tokens=MAX_OUTPUT_TOKENS,
             )
         )
+
+        # Check for empty/blocked response
+        if response.text is None:
+            # Try to get more info about why
+            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                result_queue.put(('error', f"Response blocked: {response.prompt_feedback}"))
+            elif hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'finish_reason'):
+                    result_queue.put(('error', f"Empty response, finish_reason: {candidate.finish_reason}"))
+                else:
+                    result_queue.put(('error', "Empty response from Gemini (no text returned)"))
+            else:
+                result_queue.put(('error', "Empty response from Gemini (possibly safety filtered)"))
+            return
+
         result_queue.put(('success', response.text))
     except Exception as e:
         result_queue.put(('error', str(e)))
