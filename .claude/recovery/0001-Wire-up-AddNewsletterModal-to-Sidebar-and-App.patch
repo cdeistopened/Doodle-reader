@@ -1,0 +1,95 @@
+From d52bca7311da6fa060d52a6478f47628af88f653 Mon Sep 17 00:00:00 2001
+From: cdeistopened <cdeist@opened.co>
+Date: Sat, 24 Jan 2026 22:24:54 -0800
+Subject: [PATCH] Wire up AddNewsletterModal to Sidebar and App
+
+- Add onAddNewsletter prop to Sidebar component
+- Add "Add Newsletter" button in Sidebar action buttons
+- Add isNewsletterOpen state and render AddNewsletterModal in App
+- Completes Kill the Newsletter integration feature
+---
+ App.tsx                |  8 ++++++++
+ components/Sidebar.tsx | 13 +++++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/App.tsx b/App.tsx
+index 1b59c3c..198d3a5 100644
+--- a/App.tsx
++++ b/App.tsx
+@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
+ import { FeedList } from './components/FeedList';
+ import { Header } from './components/Header';
+ import { SubscribeModal } from './components/SubscribeModal';
++import { AddNewsletterModal } from './components/AddNewsletterModal';
+ import { WelcomeState } from './components/WelcomeState';
+ import { ScanModal } from './components/ScanModal';
+ import { FolderScanModal } from './components/FolderScanModal';
+@@ -90,6 +91,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
+   const [isBulkTranscribeOpen, setBulkTranscribeOpen] = useState(false);
+   const [isSidebarOpen, setSidebarOpen] = useState(false);
+   const [isPricingOpen, setPricingOpen] = useState(false);
++  const [isNewsletterOpen, setNewsletterOpen] = useState(false);
+   const [activeBoard, setActiveBoard] = useState<Id<"boards"> | null>(null);
+ 
+   const handleSubscribe = async (url: string, onProgress?: (count: number) => void) => {
+@@ -320,6 +322,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
+         onUnsubscribe={(feedId) => unsubscribe(feedId, true)}
+         onScanPdf={() => setScanOpen(true)}
+         onFolderScan={() => setFolderScanOpen(true)}
++        onAddNewsletter={() => setNewsletterOpen(true)}
+         documentCount={documentCount}
+         isOpen={isSidebarOpen}
+         onClose={() => setSidebarOpen(false)}
+@@ -429,6 +432,11 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
+         isOpen={isPricingOpen}
+         onClose={() => setPricingOpen(false)}
+       />
++
++      <AddNewsletterModal
++        isOpen={isNewsletterOpen}
++        onClose={() => setNewsletterOpen(false)}
++      />
+     </div>
+   );
+ }
+diff --git a/components/Sidebar.tsx b/components/Sidebar.tsx
+index 9ce1916..7d4c42d 100644
+--- a/components/Sidebar.tsx
++++ b/components/Sidebar.tsx
+@@ -21,6 +21,7 @@ interface SidebarProps {
+   onUnsubscribe?: (feedId: string) => void;
+   onScanPdf?: () => void;
+   onFolderScan?: () => void;
++  onAddNewsletter?: () => void;
+   documentCount?: number;
+   isOpen?: boolean;
+   onClose?: () => void;
+@@ -42,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
+   onUnsubscribe,
+   onScanPdf,
+   onFolderScan,
++  onAddNewsletter,
+   documentCount = 0,
+   isOpen = true,
+   onClose,
+@@ -209,6 +211,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
+             <span className="font-medium text-sm">Add Feed</span>
+           </button>
+ 
++          {/* Add Newsletter */}
++          {onAddNewsletter && (
++            <button
++              onClick={onAddNewsletter}
++              className="w-full bg-paper hover:bg-cream text-ink transition-all rounded-md h-10 md:h-10 min-h-[44px] flex items-center justify-center space-x-2 border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
++            >
++              <Rss size={18} strokeWidth={2} />
++              <span className="font-medium text-sm">Add Newsletter</span>
++            </button>
++          )}
++
+           {/* Scan + OCR - Opens scanner service */}
+           <a
+             href={SCANNER_URL}
+-- 
+2.50.1 (Apple Git-155)
+
