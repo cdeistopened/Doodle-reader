@@ -1,0 +1,14 @@
+# Nixpacks configuration for Doodle Reader
+# Explicitly configure Node.js build - ignore pagesnap Python subfolder
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
