@@ -4,10 +4,8 @@
 projects/
 start-youtube-service.sh
 
-# PageSnap runtime directories
-pagesnap/sessions/
-pagesnap/venv/
-pagesnap/__pycache__/
+# PageSnap - deployed as separate Railway service
+pagesnap/
 
 # Content directories
 content/
