@@ -28,6 +28,76 @@ const MIME_TYPES = {
 const server = http.createServer(async (req, res) => {
   console.log(`${req.method} ${req.url}`);
 
+  // Newsletter Creation Proxy - bypasses CORS for kill-the-newsletter.com
+  if (req.url === '/api/newsletter' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { name } = JSON.parse(body);
+        if (!name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing name parameter' }));
+          return;
+        }
+
+        console.log(`[Newsletter Proxy] Creating feed: ${name}`);
+        const formData = new URLSearchParams();
+        formData.append('title', name);
+
+        const response = await fetch('https://kill-the-newsletter.com/feeds', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          },
+          body: formData.toString(),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upstream returned ${response.status}`);
+        }
+
+        const html = await response.text();
+
+        // Extract the publicId from the feed URL
+        const feedUrlMatch = html.match(/https:\/\/kill-the-newsletter\.com\/feeds\/([a-z0-9]+)\.xml/i);
+        if (!feedUrlMatch) {
+          throw new Error('Failed to parse feed URL from response');
+        }
+
+        const publicId = feedUrlMatch[1];
+        const result = {
+          email: `${publicId}@kill-the-newsletter.com`,
+          feedUrl: `https://kill-the-newsletter.com/feeds/${publicId}.xml`,
+        };
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(result));
+        console.log(`[Newsletter Proxy] Success: ${result.email}`);
+      } catch (error) {
+        console.error(`[Newsletter Proxy] Error:`, error.message);
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
+    });
+    return;
+  }
+
+  // Handle CORS preflight for newsletter endpoint
+  if (req.url === '/api/newsletter' && req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end();
+    return;
+  }
+
   // RSS Feed Proxy - bypasses CORS for blocked feeds like Megaphone
   if (req.url.startsWith('/api/feed?')) {
     const urlParam = new URL(req.url, `http://localhost:${PORT}`).searchParams.get('url');

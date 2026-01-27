@@ -15,42 +15,24 @@ interface CreatedFeed {
 }
 
 /**
- * Creates a newsletter feed via kill-the-newsletter.com
- * Must be called from browser (not server) to avoid Cloudflare blocking
+ * Creates a newsletter feed via local proxy to kill-the-newsletter.com
+ * Uses /api/newsletter to avoid CORS and Cloudflare issues
  */
 async function createKillTheNewsletterFeed(name: string): Promise<{ email: string; feedUrl: string }> {
-  const formData = new URLSearchParams();
-  formData.append("title", name);
-
-  const response = await fetch("https://kill-the-newsletter.com/feeds", {
+  const response = await fetch("/api/newsletter", {
     method: "POST",
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
-    body: formData.toString(),
+    body: JSON.stringify({ name }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create newsletter feed: ${response.status}`);
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(error.error || `Failed to create newsletter feed: ${response.status}`);
   }
 
-  const html = await response.text();
-
-  // Extract the publicId from the feed URL
-  // Pattern: https://kill-the-newsletter.com/feeds/{publicId}.xml
-  const feedUrlMatch = html.match(
-    /https:\/\/kill-the-newsletter\.com\/feeds\/([a-z0-9]+)\.xml/i
-  );
-
-  if (!feedUrlMatch) {
-    throw new Error("Failed to parse feed URL from response");
-  }
-
-  const publicId = feedUrlMatch[1];
-  const feedUrl = `https://kill-the-newsletter.com/feeds/${publicId}.xml`;
-  const email = `${publicId}@kill-the-newsletter.com`;
-
-  return { email, feedUrl };
+  return response.json();
 }
 
 export const AddNewsletterModal: React.FC<AddNewsletterModalProps> = ({
