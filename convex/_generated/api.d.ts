@@ -13,6 +13,7 @@ import type * as documents from "../documents.js";
 import type * as feeds from "../feeds.js";
 import type * as folders from "../folders.js";
 import type * as http from "../http.js";
+import type * as newsletters from "../newsletters.js";
 import type * as stats from "../stats.js";
 import type * as stripe from "../stripe.js";
 
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   feeds: typeof feeds;
   folders: typeof folders;
   http: typeof http;
+  newsletters: typeof newsletters;
   stats: typeof stats;
   stripe: typeof stripe;
 }>;
