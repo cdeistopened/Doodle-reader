@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, X, Mail, Copy, Check } from 'lucide-react';
-import { useAction } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
 
 interface AddNewsletterModalProps {
@@ -14,6 +14,45 @@ interface CreatedFeed {
   feedUrl: string;
 }
 
+/**
+ * Creates a newsletter feed via kill-the-newsletter.com
+ * Must be called from browser (not server) to avoid Cloudflare blocking
+ */
+async function createKillTheNewsletterFeed(name: string): Promise<{ email: string; feedUrl: string }> {
+  const formData = new URLSearchParams();
+  formData.append("title", name);
+
+  const response = await fetch("https://kill-the-newsletter.com/feeds", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formData.toString(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create newsletter feed: ${response.status}`);
+  }
+
+  const html = await response.text();
+
+  // Extract the publicId from the feed URL
+  // Pattern: https://kill-the-newsletter.com/feeds/{publicId}.xml
+  const feedUrlMatch = html.match(
+    /https:\/\/kill-the-newsletter\.com\/feeds\/([a-z0-9]+)\.xml/i
+  );
+
+  if (!feedUrlMatch) {
+    throw new Error("Failed to parse feed URL from response");
+  }
+
+  const publicId = feedUrlMatch[1];
+  const feedUrl = `https://kill-the-newsletter.com/feeds/${publicId}.xml`;
+  const email = `${publicId}@kill-the-newsletter.com`;
+
+  return { email, feedUrl };
+}
+
 export const AddNewsletterModal: React.FC<AddNewsletterModalProps> = ({
   isOpen,
   onClose,
@@ -24,7 +63,7 @@ export const AddNewsletterModal: React.FC<AddNewsletterModalProps> = ({
   const [createdFeed, setCreatedFeed] = useState<CreatedFeed | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const createNewsletterFeed = useAction(api.newsletters.createNewsletterFeed);
+  const saveNewsletterFeed = useMutation(api.newsletters.saveNewsletterFeed);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -47,11 +86,20 @@ export const AddNewsletterModal: React.FC<AddNewsletterModalProps> = ({
     setError(null);
 
     try {
-      const result = await createNewsletterFeed({ name: name.trim() });
+      // Step 1: Create feed via kill-the-newsletter.com (browser-side)
+      const { email, feedUrl } = await createKillTheNewsletterFeed(name.trim());
+
+      // Step 2: Save to Convex database
+      await saveNewsletterFeed({
+        name: name.trim(),
+        email,
+        feedUrl,
+      });
+
       setCreatedFeed({
-        name: result.name,
-        email: result.email,
-        feedUrl: result.feedUrl,
+        name: name.trim(),
+        email,
+        feedUrl,
       });
     } catch (err: any) {
       setError(err.message || 'Failed to create newsletter feed');

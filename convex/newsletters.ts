@@ -5,8 +5,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, action, internalMutation } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { query, mutation } from "./_generated/server";
 
 // =============================================================================
 // QUERIES
@@ -36,29 +35,6 @@ export const listNewsletterFeeds = query({
 // =============================================================================
 
 /**
- * Store a newsletter feed (internal, called by action)
- */
-export const storeNewsletterFeed = internalMutation({
-  args: {
-    userId: v.string(),
-    name: v.string(),
-    email: v.string(),
-    feedUrl: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const id = await ctx.db.insert("newsletterFeeds", {
-      userId: args.userId,
-      name: args.name,
-      email: args.email,
-      feedUrl: args.feedUrl,
-      createdAt: Date.now(),
-    });
-
-    return id;
-  },
-});
-
-/**
  * Delete a newsletter feed by ID
  */
 export const deleteNewsletterFeed = mutation({
@@ -78,87 +54,38 @@ export const deleteNewsletterFeed = mutation({
   },
 });
 
-// =============================================================================
-// ACTIONS
-// =============================================================================
-
 /**
- * Create a new newsletter feed via kill-the-newsletter.com
+ * Save a newsletter feed (called from client after browser-side creation)
  *
- * This action:
- * 1. POSTs to kill-the-newsletter.com with the feed name
- * 2. Parses the HTML response to extract email and feed URL
- * 3. Stores the result in the database
+ * The browser makes the POST to kill-the-newsletter.com directly to avoid
+ * Cloudflare blocking server-side requests. Then it calls this mutation
+ * to persist the result.
  */
-export const createNewsletterFeed = action({
+export const saveNewsletterFeed = mutation({
   args: {
     name: v.string(),
+    email: v.string(),
+    feedUrl: v.string(),
   },
-  handler: async (ctx, args): Promise<{
-    id: string;
-    name: string;
-    email: string;
-    feedUrl: string;
-  }> => {
-    // Build form data
-    const formData = new URLSearchParams();
-    formData.append("title", args.name);
-
-    // POST to kill-the-newsletter.com
-    const response = await fetch("https://kill-the-newsletter.com/feeds", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-      body: formData.toString(),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create newsletter feed: ${response.status}`);
-    }
-
-    const html = await response.text();
-
-    // Parse the response to extract email and feed URL
-    // The email is in format: {publicId}@kill-the-newsletter.com
-    // The feed URL is in format: https://kill-the-newsletter.com/feeds/{publicId}.xml
-    //
-    // These appear in input elements with the values
-
-    // Extract the publicId from the feed URL (more reliable pattern)
-    // Pattern: https://kill-the-newsletter.com/feeds/{publicId}.xml
-    const feedUrlMatch = html.match(
-      /https:\/\/kill-the-newsletter\.com\/feeds\/([a-z0-9]+)\.xml/i
-    );
-
-    if (!feedUrlMatch) {
-      throw new Error("Failed to parse feed URL from response");
-    }
-
-    const publicId = feedUrlMatch[1];
-    const feedUrl = `https://kill-the-newsletter.com/feeds/${publicId}.xml`;
-    const email = `${publicId}@kill-the-newsletter.com`;
-
-    // Get the user identity
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    // Store in database
-    const newId: string = await ctx.runMutation(internal.newsletters.storeNewsletterFeed, {
+    const id = await ctx.db.insert("newsletterFeeds", {
       userId: identity.subject,
       name: args.name,
-      email,
-      feedUrl,
-    }) as string;
+      email: args.email,
+      feedUrl: args.feedUrl,
+      createdAt: Date.now(),
+    });
 
     return {
-      id: newId,
+      id,
       name: args.name,
-      email,
-      feedUrl,
+      email: args.email,
+      feedUrl: args.feedUrl,
     };
   },
 });
