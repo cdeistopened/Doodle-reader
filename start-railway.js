@@ -195,6 +195,55 @@ app.get('/api/audio/proxy', async (req, res) => {
   }
 });
 
+// Newsletter Creation Proxy - bypasses CORS for kill-the-newsletter.com
+app.post('/api/newsletter', async (req, res) => {
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Missing name parameter' });
+  }
+
+  console.log(`[Newsletter Proxy] Creating feed: ${name}`);
+
+  try {
+    const formData = new URLSearchParams();
+    formData.append('title', name);
+
+    const response = await fetch('https://kill-the-newsletter.com/feeds', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
+      body: formData.toString(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upstream returned ${response.status}`);
+    }
+
+    const html = await response.text();
+
+    // Extract the publicId from the feed URL
+    const feedUrlMatch = html.match(/https:\/\/kill-the-newsletter\.com\/feeds\/([a-z0-9]+)\.xml/i);
+    if (!feedUrlMatch) {
+      throw new Error('Failed to parse feed URL from response');
+    }
+
+    const publicId = feedUrlMatch[1];
+    const result = {
+      email: `${publicId}@kill-the-newsletter.com`,
+      feedUrl: `https://kill-the-newsletter.com/feeds/${publicId}.xml`,
+    };
+
+    console.log(`[Newsletter Proxy] Success: ${result.email}`);
+    res.json(result);
+  } catch (error) {
+    console.error(`[Newsletter Proxy] Error:`, error.message);
+    res.status(502).json({ error: error.message });
+  }
+});
+
 app.get('/api/feed', async (req, res) => {
   const { url } = req.query;
   
