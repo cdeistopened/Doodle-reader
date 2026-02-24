@@ -10,7 +10,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalMutation } from "./_generated/server";
+import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { XMLParser } from "fast-xml-parser";
 
@@ -121,41 +121,8 @@ function ensureArray(val: any): any[] {
   return Array.isArray(val) ? val : [val];
 }
 
-// =============================================================================
-// INTERNAL MUTATION — Create a stream from parsed OPML category
-// =============================================================================
-
-export const createStreamFromCategory = internalMutation({
-  args: {
-    userId: v.string(),
-    name: v.string(),
-    sources: v.array(v.object({
-      type: v.union(
-        v.literal("rss"),
-        v.literal("youtube_channel"),
-        v.literal("google_alert"),
-        v.literal("newsletter")
-      ),
-      url: v.string(),
-      name: v.optional(v.string()),
-    })),
-    schedule: v.union(v.literal("daily"), v.literal("twice_daily"), v.literal("weekly")),
-    deliveryEmail: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    return await ctx.db.insert("streams", {
-      userId: args.userId,
-      name: args.name,
-      sources: args.sources,
-      schedule: args.schedule,
-      deliveryEmail: args.deliveryEmail,
-      isActive: true,
-      created: now,
-      updated: now,
-    });
-  },
-});
+// createStreamFromCategory mutation is in digestHelpers.ts
+// (Convex requires mutations to be in non-Node.js files).
 
 // =============================================================================
 // PUBLIC ACTION — Import OPML
@@ -219,7 +186,7 @@ export const importOPML = action({
     const createdStreams: { name: string; id: string; sourceCount: number }[] = [];
 
     for (const cat of filtered) {
-      const id = await ctx.runMutation(internal.opml.createStreamFromCategory, {
+      const id = await ctx.runMutation(internal.digestHelpers.createStreamFromCategory, {
         userId: identity.subject,
         name: cat.name,
         sources: cat.sources,

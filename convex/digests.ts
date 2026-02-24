@@ -9,7 +9,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { XMLParser } from "fast-xml-parser";
@@ -38,110 +38,8 @@ interface FetchedItem {
   mediaType: "text" | "video" | "audio";
 }
 
-// =============================================================================
-// INTERNAL QUERIES
-// =============================================================================
-
-/**
- * Get all active streams that are due for processing
- */
-export const getStreamsToProcess = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const streams = await ctx.db
-      .query("streams")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
-      .collect();
-
-    const now = Date.now();
-    return streams.filter((stream) => {
-      if (!stream.lastRun) return true; // Never run, always due
-
-      const elapsed = now - stream.lastRun;
-      const ONE_HOUR = 3600_000;
-      const ONE_DAY = 86400_000;
-
-      switch (stream.schedule) {
-        case "twice_daily":
-          return elapsed >= 12 * ONE_HOUR;
-        case "daily":
-          return elapsed >= ONE_DAY;
-        case "weekly":
-          return elapsed >= 7 * ONE_DAY;
-        default:
-          return elapsed >= ONE_DAY;
-      }
-    });
-  },
-});
-
-// =============================================================================
-// INTERNAL MUTATIONS
-// =============================================================================
-
-/**
- * Save a completed digest run
- */
-export const saveDigestRun = internalMutation({
-  args: {
-    streamId: v.id("streams"),
-    userId: v.string(),
-    items: v.array(v.object({
-      title: v.string(),
-      url: v.string(),
-      sourceName: v.string(),
-      sourceUrl: v.optional(v.string()),
-      summary: v.string(),
-      publishedAt: v.optional(v.string()),
-      contentType: v.union(
-        v.literal("article"),
-        v.literal("video"),
-        v.literal("podcast"),
-        v.literal("newsletter")
-      ),
-      fullContent: v.optional(v.string()),
-    })),
-    digestMarkdown: v.optional(v.string()),
-    digestHtml: v.optional(v.string()),
-    itemCount: v.number(),
-    tokensUsed: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const runId = await ctx.db.insert("digestRuns", {
-      streamId: args.streamId,
-      userId: args.userId,
-      items: args.items,
-      digestMarkdown: args.digestMarkdown,
-      digestHtml: args.digestHtml,
-      itemCount: args.itemCount,
-      generatedAt: now,
-      tokensUsed: args.tokensUsed,
-    });
-
-    // Update stream lastRun
-    await ctx.db.patch(args.streamId, {
-      lastRun: now,
-      updated: now,
-    });
-
-    return runId;
-  },
-});
-
-/**
- * Mark an email as sent on a digest run
- */
-export const markEmailSent = internalMutation({
-  args: {
-    digestRunId: v.id("digestRuns"),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.digestRunId, {
-      emailSentAt: Date.now(),
-    });
-  },
-});
+// Queries and mutations are in digestHelpers.ts (Convex requires
+// queries/mutations to be in non-Node.js files).
 
 // =============================================================================
 // DIGEST PIPELINE (Node.js action)
@@ -154,7 +52,7 @@ export const markEmailSent = internalMutation({
 export const processActiveStreams = internalAction({
   args: {},
   handler: async (ctx) => {
-    const streams = await ctx.runQuery(internal.digests.getStreamsToProcess);
+    const streams = await ctx.runQuery(internal.digestHelpers.getStreamsToProcess);
 
     console.log(`[Digest] Found ${streams.length} streams to process`);
 
@@ -174,7 +72,7 @@ export const processActiveStreams = internalAction({
 export const runStreamNow = action({
   args: { streamId: v.id("streams") },
   handler: async (ctx, args) => {
-    const stream = await ctx.runQuery(internal.digests.getStreamById, {
+    const stream = await ctx.runQuery(internal.digestHelpers.getStreamById, {
       id: args.streamId,
     });
     if (!stream) throw new Error("Stream not found");
@@ -183,15 +81,6 @@ export const runStreamNow = action({
   },
 });
 
-/**
- * Get a stream by ID (internal, no auth check)
- */
-export const getStreamById = internalQuery({
-  args: { id: v.id("streams") },
-  handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
-  },
-});
 
 // =============================================================================
 // CORE PIPELINE
@@ -286,7 +175,7 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
   }
 
   // 5. SAVE — Persist the digest run
-  const runId = await ctx.runMutation(internal.digests.saveDigestRun, {
+  const runId = await ctx.runMutation(internal.digestHelpers.saveDigestRun, {
     streamId: stream._id,
     userId: stream.userId,
     items: digestItems,
@@ -305,7 +194,7 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
         subject: `${stream.name} — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`,
         html,
       });
-      await ctx.runMutation(internal.digests.markEmailSent, { digestRunId: runId });
+      await ctx.runMutation(internal.digestHelpers.markEmailSent, { digestRunId: runId });
       console.log(`[Digest] Email sent for "${stream.name}" to ${stream.deliveryEmail}`);
     } catch (error: any) {
       console.error(`[Digest] Failed to send email:`, error.message);
