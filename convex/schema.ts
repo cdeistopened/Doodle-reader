@@ -509,4 +509,104 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_user", ["userId"]),
+
+  // ---------------------------------------------------------------------------
+  // STREAMS (DoodleDog Digest Engine)
+  // A stream is a cluster of feeds/sources around a topic, monitored on a
+  // schedule and delivered as a curated digest.
+  // ---------------------------------------------------------------------------
+  streams: defineTable({
+    userId: v.string(),
+
+    // Identity
+    name: v.string(),                    // "AI & Tech", "OpenEd Homeschool"
+    description: v.optional(v.string()),
+
+    // Sources to monitor
+    sources: v.array(v.object({
+      type: v.union(
+        v.literal("rss"),
+        v.literal("youtube_channel"),
+        v.literal("google_alert"),
+        v.literal("newsletter")
+      ),
+      url: v.string(),                   // Feed URL, channel RSS URL, etc.
+      name: v.optional(v.string()),      // Display name
+    })),
+
+    // Filters (optional)
+    filters: v.optional(v.object({
+      keywords: v.optional(v.array(v.string())),
+      excludeKeywords: v.optional(v.array(v.string())),
+      maxItemsPerDigest: v.optional(v.number()),
+    })),
+
+    // Digest format
+    format: v.optional(v.object({
+      style: v.optional(v.union(
+        v.literal("newsletter"),   // Formatted email digest
+        v.literal("briefing"),     // Executive summary style
+        v.literal("raw")           // Just items, minimal formatting
+      )),
+      includeFullContent: v.optional(v.boolean()),
+      customPrompt: v.optional(v.string()),  // Editorial voice
+    })),
+
+    // Delivery
+    schedule: v.union(
+      v.literal("daily"),
+      v.literal("twice_daily"),
+      v.literal("weekly")
+    ),
+    deliveryEmail: v.string(),
+    deliveryTime: v.optional(v.string()),  // "08:00" — preferred send time
+
+    // State
+    isActive: v.boolean(),
+    lastRun: v.optional(v.number()),       // Timestamp of last digest run
+    created: v.number(),
+    updated: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_active", ["isActive"]),
+
+  // ---------------------------------------------------------------------------
+  // DIGEST RUNS (Output of each digest generation)
+  // ---------------------------------------------------------------------------
+  digestRuns: defineTable({
+    streamId: v.id("streams"),
+    userId: v.string(),
+
+    // The curated items
+    items: v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      sourceName: v.string(),
+      sourceUrl: v.optional(v.string()),
+      summary: v.string(),
+      publishedAt: v.optional(v.string()),
+      contentType: v.union(
+        v.literal("article"),
+        v.literal("video"),
+        v.literal("podcast"),
+        v.literal("newsletter")
+      ),
+      fullContent: v.optional(v.string()),   // Full markdown content
+    })),
+
+    // The composed digest (editorial output)
+    digestMarkdown: v.optional(v.string()),  // Full digest as markdown
+    digestHtml: v.optional(v.string()),      // Rendered email HTML
+
+    // Metadata
+    itemCount: v.number(),
+    generatedAt: v.number(),
+    emailSentAt: v.optional(v.number()),
+
+    // AI usage tracking
+    tokensUsed: v.optional(v.number()),
+  })
+    .index("by_stream", ["streamId"])
+    .index("by_user", ["userId"])
+    .index("by_user_date", ["userId", "generatedAt"]),
 });
