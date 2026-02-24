@@ -36,3 +36,6 @@ content/
 pagesnap/sessions/
 pagesnap/venv/
 pagesnap/__pycache__/
+
+# Digest engine output (generated locally by test-digest.js)
+digest-output/
