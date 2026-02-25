@@ -2,7 +2,7 @@
 
 ## Context
 
-**What we're building:** A digest service that monitors your information streams (RSS, YouTube, podcasts, newsletters, social), curates and summarizes new content, and delivers it as a beautiful email digest on your schedule. Each item links to a hosted reader page optimized for mobile — think Pocket/Instapaper meets AI curation.
+**What we're building:** A digest service that monitors your information streams, curates and summarizes new content, and delivers it as a beautiful email digest on your schedule. Each item links to a hosted reader page optimized for mobile — think Pocket/Instapaper meets AI curation. **Current 30-day MVP scope is email-first with RSS + YouTube channel RSS sources only.**
 
 **Why:** Google Reader died. RSS readers are for power users. Most people want curated, summarized content delivered to them — not another app to check. Cora proved this works for email ($20/mo, 2,500 beta users). DoodleDog does it for information streams.
 
@@ -25,6 +25,37 @@
 
 ---
 
+## 30-Day MVP Lock (Agreed Feb 24, 2026)
+
+1. **Core promise:** Get one sharp digest from chosen sources, with clear summaries and why each item matters.
+2. **MVP loop:** Add feeds once → receive daily digest email → open 1-2 items in hosted reader → save/share best item.
+3. **Output format:** Email-first, web-reader second.
+4. **Source scope:** RSS + YouTube channel RSS only for v1.
+5. **Primary success metric:** `% of activated users who open at least 3 digests in week 2` (target: **35%+** in first 30 days).
+
+## Strict MVP Cut List (Out For First 30 Days)
+
+- Podcast ingestion/transcription expansion beyond existing feed support
+- Social platform ingestion (Twitter/X, TikTok, Reddit workflows)
+- Slack delivery
+- Advanced stream wizard UX and full stream management dashboard
+- Boards/highlights/note-taking in public reader
+- OpenClaw packaging and unified external API key rollout
+
+## Two-Week Execution Plan (Feb 25-Mar 10, 2026)
+
+### Week 1 (Email quality + activation)
+
+1. Improve digest quality and consistency for email-first UX (`doodle-reader-r7m`)
+2. Reduce time-to-first-digest with a narrow activation flow (`doodle-reader-k2t`)
+
+### Week 2 (Retention instrumentation)
+
+1. Instrument week-2 retention metric from email and reader events (`doodle-reader-v9q`)
+2. Build a lightweight KPI view/query for the week-2 open target (`doodle-reader-x4n`)
+
+---
+
 ## Current Status (Feb 2026)
 
 ### What's Built (Phase 1 — Partial)
@@ -41,6 +72,8 @@
 
 ### What's NOT Built Yet
 
+- Retention instrumentation for week-2 KPI tracking
+- Activation-focused setup flow for first digest
 - Stream management UI (Phase 3)
 - Save-for-later / boards (Phase 4)
 - Clerk auth not yet configured for Convex (auth.config.ts is conditional)
@@ -162,6 +195,8 @@ Intentionally AFTER the core product works.
 - **Slack delivery** — Add optional `slackChannel` to streams. Format as Slack blocks, post via webhook.
 - **Podcast/YouTube enrichment** — Each stream needs more multimedia sources. YouTube Data API for channel discovery.
 - **Merge OpenEd curation feeds** — 64 verified homeschool/ed feeds in OpenEd RSS curation skill (FEEDS.md), many not in Feedly OPML. Union = comprehensive Homeschool stream. Includes 5 Google News alerts.
+- **Podcast/social source expansion** — postponed until MVP retention target is met.
+- **OpenClaw skill packaging** — postponed until core email-reader loop retention is validated.
 
 ---
 
@@ -169,11 +204,11 @@ Intentionally AFTER the core product works.
 
 1. ~~**Phase 1a+1b** — Stream schema + digest pipeline~~ DONE
 2. ~~**Phase 1c** — Server-safe RSS parser~~ DONE
-3. **Phase 1d** — Email delivery (Resend) ← NEXT
-4. **Phase 2** — Hosted reader page
-5. **Phase 3** — Stream creation wizard
-6. **Phase 4** — Save-for-later / boards
-7. **Phase 5** — OpenClaw packaging
+3. ~~**Phase 1d** — Email delivery (Resend)~~ DONE
+4. ~~**Phase 2a/2c** — Hosted reader public routes + overview~~ DONE
+5. **MVP Sprint Week 1** — Email quality + activation flow
+6. **MVP Sprint Week 2** — Retention instrumentation + KPI view
+7. **Phase 3/4/5 expansion** — Only after MVP metric validation
 
 ---
 
