@@ -87,11 +87,12 @@ Tables added to `convex/schema.ts`: `streams` (with by_user, by_active indexes) 
 
 Uses `fast-xml-parser` in digests.ts action (Node.js runtime). Handles RSS 2.0, Atom, and RDF formats.
 
-### 1d. Email delivery — TODO
+### 1d. Email delivery — DONE
 
 - **Service:** Resend (simple, good free tier, great DX)
-- **Template:** HTML email with stream name + date header, per-item cards, "Read more →" links
-- **Styling:** Inline CSS derived from existing editorial typography
+- **Template:** HTML email with stream name + date header, per-item cards, reader links + original links
+- **Storage:** Persist rendered `digestHtml` to `digestRuns` for hosted viewing/debugging
+- **Config:** `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `DOODLEDOG_APP_URL`
 
 ### 1e. Convex cron job — DONE
 
@@ -103,23 +104,23 @@ Uses `fast-xml-parser` in digests.ts action (Node.js runtime). Handles RSS 2.0, 
 
 **Goal:** Click an item in the digest email → beautiful, mobile-optimized page with full content.
 
-### 2a. Public digest route
+### 2a. Public digest route — DONE
 
 `/read/:digestRunId/:itemIndex` — no login required, shareable URL.
 
-### 2b. Reader features
+### 2b. Reader features — PARTIAL
 
 - Progressive disclosure: summary → full content
-- Save/highlight (if logged in)
+- Save/highlight (if logged in) — pending
 - View original link
 - Previous/next navigation
 - Reuse `.prose-polished` typography
 
-### 2c. Digest overview page
+### 2c. Digest overview page — DONE
 
 `/digest/:digestRunId` — all items as cards, mini-magazine layout.
 
-### Files to create
+### Files created
 
 | File | Purpose |
 |------|---------|
