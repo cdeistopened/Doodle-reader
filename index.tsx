@@ -1,9 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider, useAuth } from '@clerk/clerk-react';
-import { ConvexReactClient } from 'convex/react';
+import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { ConvexStorageProvider } from './lib/storage/convex-provider';
+import { DigestOverview } from './components/DigestOverview';
+import { DigestReader } from './components/DigestReader';
 import App from './App';
 
 // Get environment variables
@@ -25,6 +27,41 @@ const convex = isValidConvexUrl ? new ConvexReactClient(convexUrl) : null;
 const container = document.getElementById('root');
 const root = createRoot(container!);
 
+type PublicDigestRoute =
+  | { kind: 'overview'; digestRunId: string }
+  | { kind: 'reader'; digestRunId: string; itemIndex: number };
+
+function parsePublicDigestRoute(pathname: string): PublicDigestRoute | null {
+  const readerMatch = pathname.match(/^\/read\/([^/]+)\/(\d+)\/?$/);
+  if (readerMatch) {
+    return {
+      kind: 'reader',
+      digestRunId: decodeURIComponent(readerMatch[1]),
+      itemIndex: Number.parseInt(readerMatch[2], 10),
+    };
+  }
+
+  const digestMatch = pathname.match(/^\/digest\/([^/]+)\/?$/);
+  if (digestMatch) {
+    return {
+      kind: 'overview',
+      digestRunId: decodeURIComponent(digestMatch[1]),
+    };
+  }
+
+  return null;
+}
+
+function PublicDigestApp({ route }: { route: PublicDigestRoute }) {
+  if (route.kind === 'overview') {
+    return <DigestOverview digestRunId={route.digestRunId} />;
+  }
+
+  return <DigestReader digestRunId={route.digestRunId} itemIndex={route.itemIndex} />;
+}
+
+const publicDigestRoute = parsePublicDigestRoute(window.location.pathname);
+
 /**
  * Storage Modes:
  * - 'hybrid': Local IndexedDB for feeds/articles (fast), Convex for saved content (when authenticated)
@@ -36,7 +73,30 @@ const root = createRoot(container!);
  * and cloud sync only when user explicitly saves/transcribes content.
  */
 
-if (isValidClerkKey && convex) {
+if (publicDigestRoute) {
+  if (!convex) {
+    root.render(
+      <React.StrictMode>
+        <div className="min-h-screen bg-cream flex items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-serif text-ink mb-3">Public reader unavailable</h1>
+            <p className="text-ink-muted">
+              `VITE_CONVEX_URL` is not configured, so this digest page cannot load.
+            </p>
+          </div>
+        </div>
+      </React.StrictMode>
+    );
+  } else {
+    root.render(
+      <React.StrictMode>
+        <ConvexProvider client={convex}>
+          <PublicDigestApp route={publicDigestRoute} />
+        </ConvexProvider>
+      </React.StrictMode>
+    );
+  }
+} else if (isValidClerkKey && convex) {
   // Hybrid mode: Local for feeds, Convex for saved content when authenticated
   // Best of both worlds - fast local reads, cloud persistence for saved items
   root.render(

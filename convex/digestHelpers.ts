@@ -124,6 +124,21 @@ export const markEmailSent = internalMutation({
 });
 
 /**
+ * Store rendered HTML for a digest run.
+ */
+export const setDigestHtml = internalMutation({
+  args: {
+    digestRunId: v.id("digestRuns"),
+    digestHtml: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.digestRunId, {
+      digestHtml: args.digestHtml,
+    });
+  },
+});
+
+/**
  * Create a stream from an OPML category (used by opml.ts import action)
  */
 export const createStreamFromCategory = internalMutation({

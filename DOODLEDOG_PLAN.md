@@ -34,13 +34,13 @@
 - **OPML import** — `convex/opml.ts` parses Feedly exports, classifies sources, creates streams
 - **Cron job** — `convex/crons.ts` runs hourly to trigger digest processing
 - **Server-safe RSS** — `fast-xml-parser` based parsing in digests.ts
+- **Resend delivery + HTML persistence** — `convex/digests.ts` sends digest email, stores `digestHtml`, and generates reader links
+- **Public reader routes** — `/digest/:digestRunId` and `/read/:digestRunId/:itemIndex` with `convex/publicDigests.ts`
 - **Local test script** — `test-digest.js` runs the full pipeline locally (fetch → summarize → compose → HTML)
 - **Convex project** — `doodle-reader-76a04` at `enduring-wombat-881.convex.cloud`
 
 ### What's NOT Built Yet
 
-- Email delivery (Resend integration)
-- Hosted reader pages (Phase 2)
 - Stream management UI (Phase 3)
 - Save-for-later / boards (Phase 4)
 - Clerk auth not yet configured for Convex (auth.config.ts is conditional)

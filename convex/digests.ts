@@ -184,21 +184,37 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
     tokensUsed: totalTokens,
   });
 
+  // Render + store email HTML even if delivery is disabled.
+  const appBaseUrl = getAppBaseUrl();
+  const digestHtml = generateEmailHtml({
+    stream,
+    digestRunId: runId,
+    items: digestItems,
+    digestMarkdown,
+    appBaseUrl,
+  });
+  await ctx.runMutation(internal.digestHelpers.setDigestHtml, {
+    digestRunId: runId,
+    digestHtml,
+  });
+
   // 6. DELIVER — Send email
   const resendKey = process.env.RESEND_API_KEY;
   if (resendKey && stream.deliveryEmail) {
     try {
-      const html = generateEmailHtml(stream, digestItems, digestMarkdown);
       await sendEmail(resendKey, {
+        from: getDigestFromAddress(),
         to: stream.deliveryEmail,
         subject: `${stream.name} — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`,
-        html,
+        html: digestHtml,
       });
       await ctx.runMutation(internal.digestHelpers.markEmailSent, { digestRunId: runId });
       console.log(`[Digest] Email sent for "${stream.name}" to ${stream.deliveryEmail}`);
     } catch (error: any) {
       console.error(`[Digest] Failed to send email:`, error.message);
     }
+  } else if (!resendKey) {
+    console.log(`[Digest] RESEND_API_KEY not set, skipping email delivery for "${stream.name}"`);
   }
 
   console.log(`[Digest] Completed "${stream.name}": ${digestItems.length} items, ${totalTokens} tokens`);
@@ -465,11 +481,15 @@ Output in Markdown format. Keep it scannable — someone should read this in 3-5
 // EMAIL GENERATION
 // =============================================================================
 
-function generateEmailHtml(
-  stream: any,
-  items: DigestItem[],
-  digestMarkdown?: string
-): string {
+function generateEmailHtml(options: {
+  stream: any;
+  digestRunId: Id<"digestRuns">;
+  items: DigestItem[];
+  digestMarkdown?: string;
+  appBaseUrl: string;
+}): string {
+  const { stream, digestRunId, items, digestMarkdown, appBaseUrl } = options;
+
   const date = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -477,24 +497,32 @@ function generateEmailHtml(
     year: 'numeric',
   });
 
+  const digestOverviewUrl = `${appBaseUrl}/digest/${digestRunId}`;
+
   const itemsHtml = items
-    .map((item) => {
+    .map((item, index) => {
       const typeEmoji = item.contentType === 'video' ? '📺'
         : item.contentType === 'podcast' ? '🎙️'
         : item.contentType === 'newsletter' ? '📰'
         : '📄';
+      const readerUrl = `${appBaseUrl}/read/${digestRunId}/${index}`;
 
       return `
       <tr>
         <td style="padding: 16px 0; border-bottom: 1px solid #EBEBEB;">
           <div style="font-size: 11px; color: #777; margin-bottom: 4px;">
-            ${typeEmoji} ${item.sourceName}${item.publishedAt ? ` · ${new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+            ${typeEmoji} ${escapeHtml(item.sourceName)}${item.publishedAt ? ` · ${new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
           </div>
-          <a href="${item.url}" style="color: #2200CC; text-decoration: none; font-size: 16px; font-weight: 600; font-family: Georgia, 'Times New Roman', serif; line-height: 1.3;">
+          <a href="${escapeHtml(readerUrl)}" style="color: #2200CC; text-decoration: none; font-size: 16px; font-weight: 600; font-family: Georgia, 'Times New Roman', serif; line-height: 1.3;">
             ${escapeHtml(item.title)}
           </a>
           <div style="font-size: 14px; color: #333; margin-top: 6px; line-height: 1.5; font-family: Georgia, 'Times New Roman', serif;">
             ${escapeHtml(item.summary)}
+          </div>
+          <div style="margin-top: 8px; font-size: 12px;">
+            <a href="${escapeHtml(readerUrl)}" style="color: #2200CC; text-decoration: none;">Open in reader →</a>
+            <span style="color: #AAA; margin: 0 6px;">|</span>
+            <a href="${escapeHtml(item.url)}" style="color: #666; text-decoration: none;">Original link</a>
           </div>
         </td>
       </tr>`;
@@ -546,7 +574,7 @@ function generateEmailHtml(
     <tr>
       <td style="padding: 24px; text-align: center; border-top: 1px solid #EBEBEB;">
         <div style="font-size: 12px; color: #999;">
-          Curated by DoodleDog · <a href="#" style="color: #999;">Manage streams</a>
+          Curated by DoodleDog · <a href="${escapeHtml(digestOverviewUrl)}" style="color: #999;">Open digest</a>
         </div>
       </td>
     </tr>
@@ -561,7 +589,7 @@ function generateEmailHtml(
 
 async function sendEmail(
   resendKey: string,
-  options: { to: string; subject: string; html: string }
+  options: { from: string; to: string; subject: string; html: string }
 ): Promise<void> {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -570,7 +598,7 @@ async function sendEmail(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'DoodleDog <digest@doodlereader.com>',
+      from: options.from,
       to: [options.to],
       subject: options.subject,
       html: options.html,
@@ -616,6 +644,15 @@ function stripHtml(html: string): string {
 
 function extractDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
+}
+
+function getAppBaseUrl(): string {
+  const raw = process.env.DOODLEDOG_APP_URL || process.env.APP_URL || 'https://doodlereader.com';
+  return raw.replace(/\/+$/, '');
+}
+
+function getDigestFromAddress(): string {
+  return process.env.RESEND_FROM_EMAIL || 'DoodleDog <onboarding@resend.dev>';
 }
 
 function escapeHtml(str: string): string {
