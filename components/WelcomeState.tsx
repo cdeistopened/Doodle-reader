@@ -4,9 +4,10 @@ import { Rss, FileText, Youtube, Sparkles } from 'lucide-react';
 interface WelcomeStateProps {
   onAddFeed: () => void;
   hasFeeds: boolean;
+  showDigestCTA?: boolean;
 }
 
-export const WelcomeState: React.FC<WelcomeStateProps> = ({ onAddFeed, hasFeeds }) => {
+export const WelcomeState: React.FC<WelcomeStateProps> = ({ onAddFeed, hasFeeds, showDigestCTA = false }) => {
   if (hasFeeds) {
     return (
       <div className="flex-grow flex items-center justify-center p-8">
@@ -44,16 +45,36 @@ export const WelcomeState: React.FC<WelcomeStateProps> = ({ onAddFeed, hasFeeds 
           </div>
         </div>
 
-        <button
-          onClick={onAddFeed}
-          className="bg-accent hover:bg-accent-muted text-white px-8 py-3 rounded-lg font-medium text-base border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all inline-flex items-center gap-2"
-        >
-          <Sparkles size={18} />
-          Add Your First Feed
-        </button>
+        {showDigestCTA ? (
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={() => { window.location.href = '/first-digest'; }}
+              className="bg-accent hover:bg-accent-muted text-white px-8 py-3 rounded-lg font-medium text-base border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all inline-flex items-center gap-2"
+            >
+              <Sparkles size={18} />
+              Create Your First Digest
+            </button>
+            <button
+              onClick={onAddFeed}
+              className="text-sm text-ink-muted hover:text-ink underline underline-offset-4"
+            >
+              Or add a feed manually
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onAddFeed}
+            className="bg-accent hover:bg-accent-muted text-white px-8 py-3 rounded-lg font-medium text-base border-2 border-ink shadow-brutal-sm hover:shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all inline-flex items-center gap-2"
+          >
+            <Sparkles size={18} />
+            Add Your First Feed
+          </button>
+        )}
 
         <p className="text-ink-muted text-sm mt-6">
-          Paste an RSS URL, podcast feed, or YouTube channel
+          {showDigestCTA
+            ? 'Pick a starter stream and get your first digest sent today'
+            : 'Paste an RSS URL, podcast feed, or YouTube channel'}
         </p>
       </div>
     </div>

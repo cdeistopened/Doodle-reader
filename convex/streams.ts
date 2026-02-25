@@ -45,6 +45,75 @@ const scheduleValidator = v.union(
   v.literal("weekly")
 );
 
+const STARTER_STREAM_TEMPLATES = [
+  {
+    id: "ai-tech-daily",
+    name: "AI & Tech Daily",
+    description: "Daily signal from AI builders and developer channels.",
+    sources: [
+      {
+        type: "rss" as const,
+        name: "Simon Willison",
+        url: "https://simonwillison.net/atom/everything/",
+      },
+      {
+        type: "rss" as const,
+        name: "Experimental History",
+        url: "https://www.experimental-history.com/feed",
+      },
+      {
+        type: "youtube_channel" as const,
+        name: "Google for Developers",
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC_x5XG1OV2P6uZZ5FSM9Ttw",
+      },
+    ],
+    filters: {
+      excludeKeywords: ["sponsored", "hiring", "job posting"],
+      maxItemsPerDigest: 12,
+    },
+    format: {
+      style: "newsletter" as const,
+      customPrompt:
+        "Write crisp summaries with practical takeaways and one sentence on why each item matters right now.",
+    },
+  },
+  {
+    id: "learning-research",
+    name: "Learning & Research",
+    description: "Research and explainer content across writing + video.",
+    sources: [
+      {
+        type: "rss" as const,
+        name: "Stratechery",
+        url: "https://stratechery.com/feed/",
+      },
+      {
+        type: "rss" as const,
+        name: "Daring Fireball",
+        url: "https://daringfireball.net/feeds/main",
+      },
+      {
+        type: "youtube_channel" as const,
+        name: "Veritasium",
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCHnyfMqiRRG1u-2MsSQLbXA",
+      },
+    ],
+    filters: {
+      excludeKeywords: ["sponsored", "press release"],
+      maxItemsPerDigest: 12,
+    },
+    format: {
+      style: "newsletter" as const,
+      customPrompt:
+        "Prioritize the key claim, supporting evidence, and one implication for a curious generalist reader.",
+    },
+  },
+] as const;
+
+function getStarterTemplate(templateId: string) {
+  return STARTER_STREAM_TEMPLATES.find((template) => template.id === templateId) || null;
+}
+
 // =============================================================================
 // QUERIES
 // =============================================================================
@@ -94,6 +163,23 @@ export const listActive = query({
   },
 });
 
+/**
+ * Starter stream templates used in first-digest activation flow.
+ */
+export const starterTemplates = query({
+  args: {},
+  handler: async () => {
+    return STARTER_STREAM_TEMPLATES.map((template) => ({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      sourceCount: template.sources.length,
+      sources: template.sources,
+      defaultSchedule: "daily" as const,
+    }));
+  },
+});
+
 // =============================================================================
 // MUTATIONS
 // =============================================================================
@@ -133,6 +219,55 @@ export const create = mutation({
     });
 
     return id;
+  },
+});
+
+/**
+ * Create a stream from a built-in starter template.
+ */
+export const createFromStarter = mutation({
+  args: {
+    templateId: v.string(),
+    deliveryEmail: v.string(),
+    schedule: v.optional(scheduleValidator),
+    deliveryTime: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const template = getStarterTemplate(args.templateId);
+    if (!template) {
+      throw new Error("Starter template not found");
+    }
+
+    const now = Date.now();
+    const streamId = await ctx.db.insert("streams", {
+      userId: identity.subject,
+      name: template.name,
+      description: template.description,
+      sources: template.sources.map((source) => ({
+        type: source.type,
+        url: source.url,
+        name: source.name,
+      })),
+      filters: {
+        excludeKeywords: template.filters.excludeKeywords ? [...template.filters.excludeKeywords] : undefined,
+        maxItemsPerDigest: template.filters.maxItemsPerDigest,
+      },
+      format: {
+        style: template.format.style,
+        customPrompt: template.format.customPrompt,
+      },
+      schedule: args.schedule || "daily",
+      deliveryEmail: args.deliveryEmail,
+      deliveryTime: args.deliveryTime,
+      isActive: true,
+      created: now,
+      updated: now,
+    });
+
+    return streamId;
   },
 });
 

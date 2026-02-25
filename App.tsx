@@ -46,13 +46,14 @@ interface StorageHookReturn {
 interface AppContentProps {
   storage: StorageHookReturn;
   enableBoards?: boolean;
+  enableDigestActivation?: boolean;
 }
 
 /**
  * Main app content - receives storage operations as props.
  * This component contains all the UI logic and is storage-agnostic.
  */
-function AppContent({ storage, enableBoards = false }: AppContentProps) {
+function AppContent({ storage, enableBoards = false, enableDigestActivation = false }: AppContentProps) {
   const {
     items,
     feeds,
@@ -373,6 +374,7 @@ function AppContent({ storage, enableBoards = false }: AppContentProps) {
           <WelcomeState 
             onAddFeed={() => setSubscribeOpen(true)}
             hasFeeds={feeds.length > 0}
+            showDigestCTA={enableDigestActivation}
           />
         ) : (
           <FeedList
@@ -457,7 +459,7 @@ function LocalApp() {
 function HybridApp() {
   const storage = useHybridStorage();
   // Enable boards in hybrid mode (requires Convex + auth)
-  return <AppContent storage={storage} enableBoards={true} />;
+  return <AppContent storage={storage} enableBoards={true} enableDigestActivation={true} />;
 }
 
 /**

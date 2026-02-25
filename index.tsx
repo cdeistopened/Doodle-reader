@@ -6,6 +6,7 @@ import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { ConvexStorageProvider } from './lib/storage/convex-provider';
 import { DigestOverview } from './components/DigestOverview';
 import { DigestReader } from './components/DigestReader';
+import { FirstDigestSetup } from './components/FirstDigestSetup';
 import App from './App';
 
 // Get environment variables
@@ -61,6 +62,7 @@ function PublicDigestApp({ route }: { route: PublicDigestRoute }) {
 }
 
 const publicDigestRoute = parsePublicDigestRoute(window.location.pathname);
+const isFirstDigestRoute = /^\/first-digest\/?$/.test(window.location.pathname);
 
 /**
  * Storage Modes:
@@ -93,6 +95,31 @@ if (publicDigestRoute) {
         <ConvexProvider client={convex}>
           <PublicDigestApp route={publicDigestRoute} />
         </ConvexProvider>
+      </React.StrictMode>
+    );
+  }
+} else if (isFirstDigestRoute) {
+  if (!isValidClerkKey || !convex) {
+    root.render(
+      <React.StrictMode>
+        <div className="min-h-screen bg-cream flex items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-serif text-ink mb-3">Setup unavailable</h1>
+            <p className="text-ink-muted">
+              `VITE_CLERK_PUBLISHABLE_KEY` and `VITE_CONVEX_URL` must be configured.
+            </p>
+          </div>
+        </div>
+      </React.StrictMode>
+    );
+  } else {
+    root.render(
+      <React.StrictMode>
+        <ClerkProvider publishableKey={clerkPubKey}>
+          <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+            <FirstDigestSetup />
+          </ConvexProviderWithClerk>
+        </ClerkProvider>
       </React.StrictMode>
     );
   }

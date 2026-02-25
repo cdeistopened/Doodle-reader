@@ -38,6 +38,13 @@ interface FetchedItem {
   mediaType: "text" | "video" | "audio";
 }
 
+interface SelectionResult {
+  items: (FetchedItem & { sourceName: string; sourceUrl?: string })[];
+  duplicateLinksSkipped: number;
+  invalidLinksSkipped: number;
+  sourceCapSkipped: number;
+}
+
 // Queries and mutations are in digestHelpers.ts (Convex requires
 // queries/mutations to be in non-Node.js files).
 
@@ -121,30 +128,56 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
     console.log(`[Digest] After filtering: ${filteredItems.length} items`);
   }
 
-  // Sort by timestamp (newest first)
+  // Sort by timestamp (newest first), then enforce quality defaults.
   filteredItems.sort((a, b) => b.timestamp - a.timestamp);
+  const maxItemsPerDigest = normalizePositiveInt(
+    stream.filters?.maxItemsPerDigest,
+    getPositiveIntFromEnv("DIGEST_MAX_ITEMS_DEFAULT", 12, 20)
+  );
+  const maxItemsPerSource = getPositiveIntFromEnv("DIGEST_MAX_ITEMS_PER_SOURCE", 2, 8);
+  const selection = selectItemsForDigest(filteredItems, maxItemsPerDigest, maxItemsPerSource);
+  const selectedItems = selection.items;
 
-  // Cap items
-  const maxItems = stream.filters?.maxItemsPerDigest || 20;
-  const cappedItems = filteredItems.slice(0, maxItems);
+  if (selectedItems.length === 0) {
+    console.warn(
+      `[Digest][Quality] "${stream.name}" skipped: no valid links after filtering/capping (duplicates=${selection.duplicateLinksSkipped}, invalidLinks=${selection.invalidLinksSkipped})`
+    );
+    return null;
+  }
 
   // 3. SUMMARIZE — Generate AI summaries for each item
   const geminiKey = process.env.GEMINI_API_KEY;
   const digestItems: DigestItem[] = [];
   let totalTokens = 0;
+  let fallbackSummaries = 0;
+  let aiEmptySummaries = 0;
 
-  for (const item of cappedItems) {
-    let summary = item.content.substring(0, 200) + '...'; // Fallback
+  for (const item of selectedItems) {
+    const fallbackSummary = buildFallbackSummary(item);
+    let summary = fallbackSummary;
+    let usedFallback = true;
 
     if (geminiKey) {
       try {
         const result = await summarizeWithGemini(geminiKey, item);
-        summary = result.summary;
+        const normalized = normalizeSummaryText(result.summary);
+        if (normalized) {
+          summary = normalized;
+          usedFallback = false;
+        } else {
+          aiEmptySummaries += 1;
+        }
         totalTokens += result.tokensUsed;
       } catch (error: any) {
         console.warn(`[Digest] Failed to summarize "${item.title}":`, error.message);
       }
     }
+
+    if (!hasMeaningfulSummary(summary)) {
+      summary = fallbackSummary;
+      usedFallback = true;
+    }
+    if (usedFallback) fallbackSummaries += 1;
 
     const contentType = item.mediaType === 'video' ? 'video' as const
       : item.mediaType === 'audio' ? 'podcast' as const
@@ -167,12 +200,26 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
   if (geminiKey && digestItems.length > 0) {
     try {
       const composed = await composeDigest(geminiKey, stream, digestItems);
-      digestMarkdown = composed.markdown;
+      digestMarkdown = normalizeDigestMarkdown(composed.markdown || "") || undefined;
       totalTokens += composed.tokensUsed;
     } catch (error: any) {
       console.warn(`[Digest] Failed to compose digest:`, error.message);
     }
   }
+  if (!digestMarkdown) {
+    digestMarkdown = composeFallbackDigestMarkdown(stream.name, digestItems);
+  }
+
+  const summaryCoverage = digestItems.length > 0
+    ? Math.round((digestItems.filter((item) => hasMeaningfulSummary(item.summary)).length / digestItems.length) * 100)
+    : 0;
+  const sourceCounts = new Map<string, number>();
+  for (const item of digestItems) {
+    sourceCounts.set(item.sourceName, (sourceCounts.get(item.sourceName) || 0) + 1);
+  }
+  const maxItemsFromSingleSource = sourceCounts.size > 0
+    ? Math.max(...Array.from(sourceCounts.values()))
+    : 0;
 
   // 5. SAVE — Persist the digest run
   const runId = await ctx.runMutation(internal.digestHelpers.saveDigestRun, {
@@ -183,6 +230,35 @@ async function processStream(ctx: any, stream: any): Promise<Id<"digestRuns"> | 
     itemCount: digestItems.length,
     tokensUsed: totalTokens,
   });
+
+  const qualityWarnings: string[] = [];
+  if (summaryCoverage < 90) qualityWarnings.push("summary_coverage_below_90");
+  if (selection.duplicateLinksSkipped > 0) qualityWarnings.push("duplicate_links_skipped");
+  if (selection.invalidLinksSkipped > 0) qualityWarnings.push("invalid_links_skipped");
+  if (selection.sourceCapSkipped > 0) qualityWarnings.push("source_cap_applied");
+  if (aiEmptySummaries > 0) qualityWarnings.push("empty_ai_summaries_recovered");
+
+  console.log(
+    `[Digest][Quality] ${JSON.stringify({
+      runId,
+      streamId: stream._id,
+      streamName: stream.name,
+      fetchedItems: allItems.length,
+      filteredItems: filteredItems.length,
+      selectedItems: selectedItems.length,
+      maxItemsPerDigest,
+      maxItemsPerSource,
+      uniqueSources: sourceCounts.size,
+      maxItemsFromSingleSource,
+      duplicateLinksSkipped: selection.duplicateLinksSkipped,
+      invalidLinksSkipped: selection.invalidLinksSkipped,
+      sourceCapSkipped: selection.sourceCapSkipped,
+      fallbackSummaries,
+      aiEmptySummaries,
+      summaryCoverage,
+      warnings: qualityWarnings,
+    })}`
+  );
 
   // Render + store email HTML even if delivery is disabled.
   const appBaseUrl = getAppBaseUrl();
@@ -386,7 +462,14 @@ async function summarizeWithGemini(
   // Truncate content to avoid token limits
   const content = item.content.substring(0, 4000);
 
-  const prompt = `Summarize this ${item.mediaType === 'video' ? 'video' : item.mediaType === 'audio' ? 'podcast episode' : 'article'} in 2-3 concise sentences. Focus on what's new or interesting.
+  const prompt = `Write a clear 2-3 sentence summary of this ${item.mediaType === 'video' ? 'video' : item.mediaType === 'audio' ? 'podcast episode' : 'article'}.
+
+Requirements:
+- Plain text only (no markdown, bullets, or labels)
+- 40-80 words total
+- Include one concrete detail
+- End with why this is worth opening
+- If source text is sparse, infer cautiously from title/context without inventing facts
 
 Title: ${item.title}
 
@@ -498,32 +581,53 @@ function generateEmailHtml(options: {
   });
 
   const digestOverviewUrl = `${appBaseUrl}/digest/${digestRunId}`;
+  const editorialIntro = extractEditorialIntro(digestMarkdown)
+    || `Here are ${items.length} highlights from ${stream.name}.`;
+  const preheader = `${items.length} curated items from ${stream.name}. Open your digest.`;
 
   const itemsHtml = items
     .map((item, index) => {
-      const typeEmoji = item.contentType === 'video' ? '📺'
-        : item.contentType === 'podcast' ? '🎙️'
-        : item.contentType === 'newsletter' ? '📰'
-        : '📄';
       const readerUrl = `${appBaseUrl}/read/${digestRunId}/${index}`;
+      const originalUrl = isValidAbsoluteUrl(item.url) ? item.url : readerUrl;
+      const dateLabel = item.publishedAt
+        ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : '';
+      const sourceDomain = extractDomainSafely(originalUrl);
+      const summaryText = normalizeSummaryText(item.summary) || buildMinimalSummary(item.title, item.sourceName);
 
       return `
       <tr>
-        <td style="padding: 16px 0; border-bottom: 1px solid #EBEBEB;">
-          <div style="font-size: 11px; color: #777; margin-bottom: 4px;">
-            ${typeEmoji} ${escapeHtml(item.sourceName)}${item.publishedAt ? ` · ${new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
-          </div>
-          <a href="${escapeHtml(readerUrl)}" style="color: #2200CC; text-decoration: none; font-size: 16px; font-weight: 600; font-family: Georgia, 'Times New Roman', serif; line-height: 1.3;">
-            ${escapeHtml(item.title)}
-          </a>
-          <div style="font-size: 14px; color: #333; margin-top: 6px; line-height: 1.5; font-family: Georgia, 'Times New Roman', serif;">
-            ${escapeHtml(item.summary)}
-          </div>
-          <div style="margin-top: 8px; font-size: 12px;">
-            <a href="${escapeHtml(readerUrl)}" style="color: #2200CC; text-decoration: none;">Open in reader →</a>
-            <span style="color: #AAA; margin: 0 6px;">|</span>
-            <a href="${escapeHtml(item.url)}" style="color: #666; text-decoration: none;">Original link</a>
-          </div>
+        <td style="padding: 0 0 18px;">
+          <table role="presentation" style="width: 100%; border: 1px solid #E8E8E8; border-radius: 10px; background: #FFFFFF;">
+            <tr>
+              <td style="padding: 16px 16px 14px;">
+                <div style="margin: 0 0 8px;">
+                  <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #1A1A1A; color: #FFFFFF; text-align: center; line-height: 22px; font-size: 11px; font-weight: 700; margin-right: 8px;">${index + 1}</span>
+                  <span style="font-size: 11px; color: #6B6B6B; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600;">
+                    ${escapeHtml(item.sourceName)}${dateLabel ? ` · ${dateLabel}` : ''}
+                  </span>
+                </div>
+
+                <a href="${escapeHtml(readerUrl)}" style="color: #161616; text-decoration: none; font-size: 19px; font-weight: 700; font-family: Georgia, 'Times New Roman', serif; line-height: 1.35; display: block; margin-bottom: 10px;">
+                  ${escapeHtml(item.title)}
+                </a>
+
+                <p style="font-size: 15px; color: #353535; margin: 0 0 12px; line-height: 1.6; font-family: Georgia, 'Times New Roman', serif;">
+                  ${escapeHtml(summaryText)}
+                </p>
+
+                <div style="font-size: 13px; line-height: 1.4;">
+                  <a href="${escapeHtml(readerUrl)}" style="color: #1A6B4A; text-decoration: none; font-weight: 600;">
+                    Open in reader →
+                  </a>
+                  <span style="color: #B8B8B8; margin: 0 8px;">|</span>
+                  <a href="${escapeHtml(originalUrl)}" style="color: #666666; text-decoration: none;">
+                    Original${sourceDomain ? ` (${escapeHtml(sourceDomain)})` : ''}
+                  </a>
+                </div>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>`;
     })
@@ -536,46 +640,65 @@ function generateEmailHtml(options: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(stream.name)} — ${date}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #F6F9FF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #FFFFFF;">
-    <!-- Header -->
-    <tr>
-      <td style="padding: 32px 24px 16px; border-bottom: 3px solid #2200CC;">
-        <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #1a1a1a; font-family: Georgia, 'Times New Roman', serif;">
-          ${escapeHtml(stream.name)}
-        </h1>
-        <div style="font-size: 13px; color: #777; margin-top: 4px;">
-          ${date} · ${items.length} items
-        </div>
-      </td>
-    </tr>
+<body style="margin: 0; padding: 0; background-color: #F4F1EC; font-family: Georgia, 'Times New Roman', serif;">
+  <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent;">
+    ${escapeHtml(preheader)}
+  </div>
 
-    ${digestMarkdown ? `
-    <!-- Editorial Overview -->
+  <table role="presentation" style="width: 100%; background-color: #F4F1EC;">
     <tr>
-      <td style="padding: 20px 24px; background-color: #FAFAFA; border-bottom: 1px solid #EBEBEB;">
-        <div style="font-size: 14px; color: #444; line-height: 1.6; font-family: Georgia, 'Times New Roman', serif; font-style: italic;">
-          ${escapeHtml(digestMarkdown.split('\n')[0] || '')}
-        </div>
-      </td>
-    </tr>
-    ` : ''}
+      <td style="padding: 20px 12px;">
+        <table role="presentation" style="width: 100%; max-width: 640px; margin: 0 auto; background: #FAFAF7; border: 1px solid #E7E2DA; border-radius: 12px;">
+          <tr>
+            <td style="padding: 28px 20px 18px; background: linear-gradient(135deg, #171717 0%, #2C2C2C 100%); border-radius: 12px 12px 0 0;">
+              <div style="font-size: 11px; color: #AFAFAF; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 7px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                DoodleDog Digest
+              </div>
+              <h1 style="margin: 0 0 6px; color: #FFFFFF; font-size: 28px; line-height: 1.2; font-family: Georgia, 'Times New Roman', serif;">
+                ${escapeHtml(stream.name)}
+              </h1>
+              <div style="font-size: 13px; color: #B6B6B6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                ${date} · ${items.length} items
+              </div>
+            </td>
+          </tr>
 
-    <!-- Items -->
-    <tr>
-      <td style="padding: 0 24px;">
-        <table role="presentation" style="width: 100%;">
-          ${itemsHtml}
+          <tr>
+            <td style="padding: 18px 20px 14px;">
+              <p style="margin: 0; padding-left: 12px; border-left: 3px solid #1A6B4A; font-size: 16px; line-height: 1.6; color: #2F2F2F; font-style: italic;">
+                ${escapeHtml(editorialIntro)}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 6px 16px 8px;">
+              <table role="presentation" style="width: 100%;">
+                ${itemsHtml}
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 8px 20px 24px;">
+              <table role="presentation" style="width: 100%;">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(digestOverviewUrl)}" style="display: inline-block; background: #1A6B4A; color: #FFFFFF; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                      Open full digest
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 0 20px 24px; text-align: center; font-size: 12px; color: #8B8B8B; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+              Curated by DoodleDog
+            </td>
+          </tr>
         </table>
-      </td>
-    </tr>
-
-    <!-- Footer -->
-    <tr>
-      <td style="padding: 24px; text-align: center; border-top: 1px solid #EBEBEB;">
-        <div style="font-size: 12px; color: #999;">
-          Curated by DoodleDog · <a href="${escapeHtml(digestOverviewUrl)}" style="color: #999;">Open digest</a>
-        </div>
       </td>
     </tr>
   </table>
@@ -642,8 +765,165 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.floor(value));
+}
+
+function getPositiveIntFromEnv(name: string, fallback: number, maxAllowed: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, maxAllowed);
+}
+
+function selectItemsForDigest(
+  items: (FetchedItem & { sourceName: string; sourceUrl?: string })[],
+  maxItemsPerDigest: number,
+  maxItemsPerSource: number
+): SelectionResult {
+  const selected: (FetchedItem & { sourceName: string; sourceUrl?: string })[] = [];
+  const seenCanonicalUrls = new Set<string>();
+  const sourceCounts = new Map<string, number>();
+
+  let duplicateLinksSkipped = 0;
+  let invalidLinksSkipped = 0;
+  let sourceCapSkipped = 0;
+
+  for (const item of items) {
+    if (selected.length >= maxItemsPerDigest) break;
+
+    const canonicalUrl = canonicalizeUrl(item.url);
+    if (!canonicalUrl) {
+      invalidLinksSkipped += 1;
+      continue;
+    }
+    if (seenCanonicalUrls.has(canonicalUrl)) {
+      duplicateLinksSkipped += 1;
+      continue;
+    }
+
+    const countForSource = sourceCounts.get(item.sourceName) || 0;
+    if (countForSource >= maxItemsPerSource) {
+      sourceCapSkipped += 1;
+      continue;
+    }
+
+    seenCanonicalUrls.add(canonicalUrl);
+    sourceCounts.set(item.sourceName, countForSource + 1);
+    selected.push({
+      ...item,
+      url: canonicalUrl,
+    });
+  }
+
+  return {
+    items: selected,
+    duplicateLinksSkipped,
+    invalidLinksSkipped,
+    sourceCapSkipped,
+  };
+}
+
+function canonicalizeUrl(url: string): string | null {
+  if (!isValidAbsoluteUrl(url)) return null;
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.searchParams.delete("utm_source");
+    parsed.searchParams.delete("utm_medium");
+    parsed.searchParams.delete("utm_campaign");
+    parsed.searchParams.delete("utm_term");
+    parsed.searchParams.delete("utm_content");
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isValidAbsoluteUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function buildFallbackSummary(item: FetchedItem): string {
+  const normalizedTitle = normalizeSummaryText(item.title) || "Untitled item";
+  const content = normalizeSummaryText(item.content);
+  if (!content) {
+    return `No excerpt was available for "${normalizedTitle}". Open the source to review the full item.`;
+  }
+
+  const trimmed = content.length > 260 ? `${content.substring(0, 257)}...` : content;
+  if (trimmed.length < 40) {
+    return `${trimmed} Open the source for full context.`;
+  }
+  return trimmed;
+}
+
+function buildMinimalSummary(title: string, sourceName: string): string {
+  const safeTitle = normalizeSummaryText(title) || "Untitled item";
+  const safeSource = normalizeSummaryText(sourceName) || "the source";
+  return `A summary was not available for "${safeTitle}". Open the source from ${safeSource} for details.`;
+}
+
+function normalizeSummaryText(text: string): string {
+  if (!text) return "";
+  return stripHtml(text)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeDigestMarkdown(markdown: string): string {
+  if (!markdown) return "";
+  return markdown
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function hasMeaningfulSummary(summary: string): boolean {
+  const normalized = normalizeSummaryText(summary);
+  return normalized.length >= 20;
+}
+
+function composeFallbackDigestMarkdown(streamName: string, items: DigestItem[]): string {
+  const heading = `# ${streamName}`;
+  const intro = `Highlights from ${items.length} recent items.`;
+  const body = items
+    .map((item, index) => {
+      const summary = normalizeSummaryText(item.summary) || buildMinimalSummary(item.title, item.sourceName);
+      return `${index + 1}. **${item.title}** (${item.sourceName})\n${summary}`;
+    })
+    .join("\n\n");
+  return `${heading}\n\n${intro}\n\n${body}`;
+}
+
+function extractEditorialIntro(markdown?: string): string {
+  if (!markdown) return "";
+  const firstSubstantiveLine = markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("#") && !/^\d+\./.test(line));
+  return firstSubstantiveLine ? normalizeSummaryText(firstSubstantiveLine) : "";
+}
+
 function extractDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
+}
+
+function extractDomainSafely(url: string): string {
+  if (!isValidAbsoluteUrl(url)) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 function getAppBaseUrl(): string {
