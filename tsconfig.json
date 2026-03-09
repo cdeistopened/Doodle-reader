@@ -34,6 +34,7 @@
     "node_modules",
     "dist",
     "temporary",
+    "convex",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",
